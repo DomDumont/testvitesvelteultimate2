@@ -96,6 +96,7 @@
     createWindow({ name: "Main Window", x: 140, y: 100, width: 180, height: 200 })
   ];
   let selectedIds: number[] = windows.map((window) => window.id);
+  let selectedIdSet: Set<number> = new Set(selectedIds);
 
   let past: MatDesignerState[] = [];
   let future: MatDesignerState[] = [];
@@ -288,10 +289,6 @@
     const x = Math.min(Math.max(window.x, 0), matWidth - width);
     const y = Math.min(Math.max(window.y, 0), matHeight - height);
     return { ...window, width, height, x, y };
-  }
-
-  function isSelected(id: number) {
-    return selectedIds.includes(id);
   }
 
   function addWindow() {
@@ -738,6 +735,8 @@
 
   $: extraDimensions = [...marginDimensions, ...spacingDimensions];
 
+  $: selectedIdSet = new Set(selectedIds);
+
   $: selectedCount = selectedIds.length;
   $: canUndo = past.length > 0;
   $: canRedo = future.length > 0;
@@ -831,13 +830,13 @@
           <tbody>
             {#each windows as window (window.id)}
               <tr
-                class:selected={isSelected(window.id)}
+                class:selected={selectedIdSet.has(window.id)}
                 on:click={(event) => toggleSelection(window.id, altKey(event))}
               >
                 <td>
                   <input
                     type="checkbox"
-                    checked={isSelected(window.id)}
+                    checked={selectedIdSet.has(window.id)}
                     on:click|stopPropagation
                     on:change={() => toggleSelection(window.id, true)}
                   />
@@ -944,9 +943,9 @@
               class="preview-window"
               role="button"
               tabindex="0"
-              aria-pressed={isSelected(view.id)}
+              aria-pressed={selectedIdSet.has(view.id)}
               aria-label={`${view.name} (${Math.round(view.width)} by ${Math.round(view.height)} ${unit})`}
-              class:selected={isSelected(view.id)}
+              class:selected={selectedIdSet.has(view.id)}
               style={`left: ${view.scaledX}px; top: ${view.scaledY}px; width: ${view.scaledWidth}px; height: ${view.scaledHeight}px;`}
               on:click={(event) => {
                 event.stopPropagation();
@@ -1429,11 +1428,4 @@
     }
   }
 </style>
-
-
-
-
-
-
-
 
