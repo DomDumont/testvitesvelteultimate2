@@ -67,6 +67,8 @@
   const DIMENSION_LABEL_MARGIN = 18;
   const DIMENSION_SAFE_PADDING = 12;
 
+  const STORAGE_KEY = 'mat-designer-state/v1';
+
   let matWidth = 500;
   let matHeight = 350;
   let unit = "mm";
@@ -107,6 +109,8 @@
   let marginDimensions: ExtraDimension[] = [];
   let spacingDimensions: ExtraDimension[] = [];
 
+  let storageReady = false;
+
   let positionedWindows: PositionedWindow[] = [];
   let matDimensions: MatDimensionOverlay = {
     horizontal: { left: 0, top: 0, length: 0 },
@@ -133,6 +137,54 @@
   function formatMeasurement(length: number) {
     const rounded = Math.round(length);
     return `${rounded} ${unit}`;
+  }
+
+  function loadPersistedState(): MatDesignerState | null {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Partial<MatDesignerState>;
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (typeof parsed.matWidth !== 'number' || typeof parsed.matHeight !== 'number') return null;
+
+      const sanitizedWindows = Array.isArray(parsed.windows)
+        ? parsed.windows
+            .filter(Boolean)
+            .map((window) => ({
+              id: Number((window as MatWindow).id) || 0,
+              name:
+                typeof (window as MatWindow).name === 'string'
+                  ? (window as MatWindow).name
+                  : `Window ${Number((window as MatWindow).id) || 0}`,
+              x: Number((window as MatWindow).x) || 0,
+              y: Number((window as MatWindow).y) || 0,
+              width: Number((window as MatWindow).width) || MIN_SIZE,
+              height: Number((window as MatWindow).height) || MIN_SIZE
+            }))
+        : [];
+
+      return {
+        matWidth: sanitizeDimension(parsed.matWidth, matWidth),
+        matHeight: sanitizeDimension(parsed.matHeight, matHeight),
+        unit: typeof parsed.unit === 'string' ? parsed.unit : unit,
+        windows: sanitizedWindows,
+        selectedIds: Array.isArray(parsed.selectedIds) ? parsed.selectedIds.map(Number) : [],
+        idCounter: typeof parsed.idCounter === 'number' ? parsed.idCounter : 0
+      };
+    } catch (error) {
+      console.warn('Failed to load mat designer state', error);
+      return null;
+    }
+  }
+
+  function persistState(state: MatDesignerState) {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.warn('Failed to persist mat designer state', error);
+    }
   }
 
   const MIN_OVERLAP_PX = 4;
@@ -224,6 +276,9 @@
         past = past.slice(-HISTORY_LIMIT);
       }
       future = [];
+      if (storageReady) {
+        persistState(after);
+      }
     }
   }
 
@@ -444,6 +499,29 @@
   }
 
   onMount(() => {
+    if (typeof window !== 'undefined') {
+      const restored = loadPersistedState();
+      if (restored) {
+        matWidth = restored.matWidth;
+        matHeight = restored.matHeight;
+        unit = restored.unit;
+        windows = restored.windows.map((window) => clampWindow({ ...window }));
+        const windowIds = new Set(windows.map((window) => window.id));
+        selectedIds = restored.selectedIds.filter((id) => windowIds.has(id));
+        if (!selectedIds.length && windows.length) {
+          selectedIds = [windows[0].id];
+        }
+        idCounter = Math.max(
+          restored.idCounter ?? 0,
+          ...windows.map((window) => window.id)
+        );
+        past = [];
+        future = [];
+      }
+      storageReady = true;
+      persistState(snapshot());
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
