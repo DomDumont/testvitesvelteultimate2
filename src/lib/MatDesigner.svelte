@@ -1,59 +1,10 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-
-  type MatWindow = {
-    id: number;
-    name: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-
-  type EditableWindowKey = "name" | "x" | "y" | "width" | "height";
-
-  type MatDesignerState = {
-    matWidth: number;
-    matHeight: number;
-    unit: string;
-    windows: MatWindow[];
-    selectedIds: number[];
-    idCounter: number;
-  };
-
-  type PositionedWindow = MatWindow & {
-    scaledX: number;
-    scaledY: number;
-    scaledWidth: number;
-    scaledHeight: number;
-    horizontal: {
-      left: number;
-      top: number;
-      length: number;
-      position: "above" | "below";
-    };
-    vertical: {
-      left: number;
-      top: number;
-      length: number;
-      position: "left" | "right";
-    };
-  };
-
-  type MatDimensionOverlay = {
-    horizontal: { left: number; top: number; length: number };
-    vertical: { left: number; top: number; length: number };
-  };
-
-  type ExtraDimension = {
-    id: string;
-    orientation: 'horizontal' | 'vertical';
-    left: number;
-    top: number;
-    length: number;
-    label: string;
-    modifier: 'margin' | 'spacing';
-  };
+  import { onMount } from 'svelte';
+  import MatDesignerHeader from './mat-designer/MatDesignerHeader.svelte';
+  import WindowTable from './mat-designer/WindowTable.svelte';
+  import ArrangeControls from './mat-designer/ArrangeControls.svelte';
+  import MatPreviewPanel from './mat-designer/MatPreviewPanel.svelte';
+  import type { MatWindow, EditableWindowKey, MatDesignerState, PositionedWindow, MatDimensionOverlay, ExtraDimension } from './mat-designer/types';
 
   const MIN_SIZE = 20;
   const PREVIEW_MAX_WIDTH = 600;
@@ -742,273 +693,70 @@
   $: canRedo = future.length > 0;
 </script>
 
-<section class="designer">
-  <header>
-    <div class="header-row">
-      <h1>Mat Designer</h1>
-      <div class="history-actions">
-        <button
-          type="button"
-          class="secondary"
-          on:click={undo}
-          disabled={!canUndo}
-          title="Undo (Ctrl/Cmd+Z)"
-        >
-          Undo
-        </button>
-        <button
-          type="button"
-          class="secondary"
-          on:click={redo}
-          disabled={!canRedo}
-          title="Redo (Ctrl/Cmd+Y or Shift+Ctrl/Cmd+Z)"
-        >
-          Redo
-        </button>
-        <button
-          type="button"
-          class="secondary print-action"
-          on:click={printLayout}
-          title="Print or Save as PDF"
-        >
-          Print / PDF
-        </button>
-      </div>
-    </div>
-    <div class="mat-controls">
-      <label>
-        Mat Width ({unit})
-        <input
-          type="number"
-          min={MIN_SIZE}
-          value={matWidth}
-          on:change={handleMatWidthChange}
-        />
-      </label>
-      <label>
-        Mat Height ({unit})
-        <input
-          type="number"
-          min={MIN_SIZE}
-          value={matHeight}
-          on:change={handleMatHeightChange}
-        />
-      </label>
-      <label>
-        Units
-        <select value={unit} on:change={handleUnitChange}>
-          {#each unitOptions as option}
-            <option value={option} selected={option === unit}>{option}</option>
-          {/each}
-        </select>
-      </label>
-      <span class="scale">Preview scale: {(previewScale * 100).toFixed(0)}%</span>
-    </div>
-  </header>
+<section class="designer mat-designer">
+  <MatDesignerHeader
+    matWidth={matWidth}
+    matHeight={matHeight}
+    unit={unit}
+    unitOptions={unitOptions}
+    previewScale={previewScale}
+    minSize={MIN_SIZE}
+    canUndo={canUndo}
+    canRedo={canRedo}
+    onMatWidthChange={handleMatWidthChange}
+    onMatHeightChange={handleMatHeightChange}
+    onUnitChange={handleUnitChange}
+    onUndo={undo}
+    onRedo={redo}
+    onPrint={printLayout}
+  />
 
   <div class="layout">
     <div class="controls">
       <div class="control-group">
-        <h2>Windows</h2>
-        <div class="actions">
-          <button type="button" on:click={addWindow}>Add Window</button>
-          <button type="button" on:click={removeSelected} disabled={!selectedCount}>
-            Remove Selected
-          </button>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th></th>
-              <th>Name</th>
-              <th>X</th>
-              <th>Y</th>
-              <th>Width</th>
-              <th>Height</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each windows as window (window.id)}
-              <tr
-                class:selected={selectedIdSet.has(window.id)}
-                on:click={(event) => toggleSelection(window.id, altKey(event))}
-              >
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={selectedIdSet.has(window.id)}
-                    on:click|stopPropagation
-                    on:change={() => toggleSelection(window.id, true)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="text"
-                    value={window.name}
-                    on:click|stopPropagation
-                    on:change={(event) =>
-                      updateWindow(window.id, "name", event.currentTarget.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    value={window.x}
-                    min="0"
-                    on:click|stopPropagation
-                    on:change={(event) =>
-                      updateWindow(window.id, "x", event.currentTarget.valueAsNumber)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    value={window.y}
-                    min="0"
-                    on:click|stopPropagation
-                    on:change={(event) =>
-                      updateWindow(window.id, "y", event.currentTarget.valueAsNumber)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    value={window.width}
-                    min={MIN_SIZE}
-                    on:click|stopPropagation
-                    on:change={(event) =>
-                      updateWindow(window.id, "width", event.currentTarget.valueAsNumber)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    value={window.height}
-                    min={MIN_SIZE}
-                    on:click|stopPropagation
-                    on:change={(event) =>
-                      updateWindow(window.id, "height", event.currentTarget.valueAsNumber)}
-                  />
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <WindowTable
+          windows={windows}
+          selectedIdSet={selectedIdSet}
+          selectedCount={selectedCount}
+          minSize={MIN_SIZE}
+          addWindow={addWindow}
+          removeSelected={removeSelected}
+          toggleSelection={toggleSelection}
+          updateWindow={updateWindow}
+          altKey={altKey}
+        />
       </div>
-
       <div class="control-group">
-        <h2>Arrange</h2>
-        <div class="buttons-grid">
-          <button type="button" on:click={() => alignSelected("left")} disabled={selectedCount < 2}>
-            Align Left
-          </button>
-          <button type="button" on:click={() => alignSelected("right")} disabled={selectedCount < 2}>
-            Align Right
-          </button>
-          <button type="button" on:click={() => alignSelected("top")} disabled={selectedCount < 2}>
-            Align Top
-          </button>
-          <button type="button" on:click={() => alignSelected("bottom")} disabled={selectedCount < 2}>
-            Align Bottom
-          </button>
-          <button type="button" on:click={() => centerSelected("horizontal")} disabled={!selectedCount}>
-            Center Horizontally
-          </button>
-          <button type="button" on:click={() => centerSelected("vertical")} disabled={!selectedCount}>
-            Center Vertically
-          </button>
-          <button type="button" on:click={() => distribute("horizontal")} disabled={selectedCount < 2}>
-            Distribute Across Mat (Horizontal)
-          </button>
-          <button type="button" on:click={() => distribute("vertical")} disabled={selectedCount < 2}>
-            Distribute Across Mat (Vertical)
-          </button>
-        </div>
+        <ArrangeControls
+          selectedCount={selectedCount}
+          alignSelected={alignSelected}
+          centerSelected={centerSelected}
+          distribute={distribute}
+        />
       </div>
     </div>
-    <div class="preview-wrapper">
-      <h2>Preview</h2>
-      <div class="mat-container" bind:clientWidth={previewContainerWidth}>
-        <div
-          class="mat"
-          role="button"
-          tabindex="0"
-          aria-label="Clear selection"
-          style={`width: ${scaledMatWidth}px; height: ${scaledMatHeight}px;`}
-          on:click={clearSelection}
-          on:keydown={(event) => handleKeyActivate(event, () => clearSelection())}
-        >
-          {#each positionedWindows as view (view.id)}
-            <div
-              class="preview-window"
-              role="button"
-              tabindex="0"
-              aria-pressed={selectedIdSet.has(view.id)}
-              aria-label={`${view.name} (${Math.round(view.width)} by ${Math.round(view.height)} ${unit})`}
-              class:selected={selectedIdSet.has(view.id)}
-              style={`left: ${view.scaledX}px; top: ${view.scaledY}px; width: ${view.scaledWidth}px; height: ${view.scaledHeight}px;`}
-              on:click={(event) => {
-                event.stopPropagation();
-                toggleSelection(view.id, altKey(event));
-              }}
-              on:keydown={(event) =>
-                handleKeyActivate(event, (keyboardEvent) =>
-                  toggleSelection(view.id, altKey(keyboardEvent))
-                )}
-            >
-              <span>{view.name}</span>
-              <small>{Math.round(view.width)}x{Math.round(view.height)} {unit}</small>
-            </div>
-            <div
-              class="dimension horizontal"
-              class:above={view.horizontal.position === "above"}
-              class:below={view.horizontal.position === "below"}
-              style={`left: ${view.horizontal.left}px; top: ${view.horizontal.top}px; width: ${view.horizontal.length}px;`}
-            >
-              <span>{formatMeasurement(view.width)}</span>
-            </div>
-            <div
-              class="dimension vertical"
-              class:left={view.vertical.position === "left"}
-              class:right={view.vertical.position === "right"}
-              style={`left: ${view.vertical.left}px; top: ${view.vertical.top}px; height: ${view.vertical.length}px;`}
-            >
-              <span>{formatMeasurement(view.height)}</span>
-            </div>
-          {/each}
-          <div
-            class="dimension horizontal mat-dimension"
-            style={`left: ${matDimensions.horizontal.left}px; top: ${matDimensions.horizontal.top}px; width: ${matDimensions.horizontal.length}px;`}
-          >
-            <span>{formatMeasurement(matWidth)}</span>
-          </div>
-          <div
-            class="dimension vertical mat-dimension"
-            style={`left: ${matDimensions.vertical.left}px; top: ${matDimensions.vertical.top}px; height: ${matDimensions.vertical.length}px;`}
-          >
-            <span>{formatMeasurement(matHeight)}</span>
-          </div>
-          {#each extraDimensions as dim (dim.id)}
-            <div
-              class={`dimension ${dim.orientation} ${dim.modifier}`}
-              style={dim.orientation === 'horizontal'
-                ? `left: ${dim.left}px; top: ${dim.top}px; width: ${dim.length}px;`
-                : `left: ${dim.left}px; top: ${dim.top}px; height: ${dim.length}px;`}
-            >
-              <span>{dim.label}</span>
-            </div>
-          {/each}
-        </div>
-      </div>
-      <button type="button" class="clear-selection" on:click={clearSelection} disabled={!selectedCount}>
-        Clear Selection
-      </button>
-    </div>
+    <MatPreviewPanel
+      bind:containerWidth={previewContainerWidth}
+      positionedWindows={positionedWindows}
+      matDimensions={matDimensions}
+      extraDimensions={extraDimensions}
+      unit={unit}
+      scaledMatWidth={scaledMatWidth}
+      scaledMatHeight={scaledMatHeight}
+      selectedIdSet={selectedIdSet}
+      formatMeasurement={formatMeasurement}
+      matWidth={matWidth}
+      matHeight={matHeight}
+      clearSelection={clearSelection}
+      toggleSelection={toggleSelection}
+      altKey={altKey}
+      handleKeyActivate={handleKeyActivate}
+      selectedCount={selectedCount}
+    />
   </div>
 </section>
 
 <style>
-
   :global(body) {
     margin: 0;
     font-family: 'Inter', system-ui, sans-serif;
@@ -1017,6 +765,7 @@
   }
 
   .designer {
+    display: flex;
     max-width: 1120px;
     margin: 0 auto;
     padding: 2rem;
@@ -1024,104 +773,15 @@
     gap: 1.5rem;
   }
 
-  header {
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .header-row {
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-  }
-
-  header h1 {
-    margin: 0;
-    font-size: 1.75rem;
-  }
-
-  .history-actions {
-    gap: 0.5rem;
-    align-items: center;
-  }
-
-  .mat-controls {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    align-items: end;
-  }
-
-  label {
-    flex-direction: column;
-    gap: 0.35rem;
-    font-size: 0.9rem;
-    font-weight: 600;
-  }
-
-  input,
-  select,
-  button {
-    font: inherit;
-  }
-
-  input[type='number'],
-  input[type='text'],
-  select {
-    padding: 0.5rem 0.65rem;
-    border: 1px solid #d1d5db;
-    border-radius: 0.5rem;
-    background: #fff;
-  }
-
-  input[type='number']:focus,
-  input[type='text']:focus,
-  select:focus {
-    outline: 2px solid #4f46e5;
-    outline-offset: 1px;
-  }
-
-  button {
-    padding: 0.5rem 0.75rem;
-    border: none;
-    border-radius: 0.5rem;
-    background: #4f46e5;
-    color: #fff;
-    cursor: pointer;
-    transition: background 0.2s ease;
-  }
-
-  button:disabled {
-    background: #9ca3af;
-    cursor: not-allowed;
-  }
-
-  button:not(:disabled):hover {
-    background: #4338ca;
-  }
-
-  button.secondary {
-    background: #e5e7eb;
-    color: #1f2937;
-  }
-
-  button.secondary:disabled {
-    background: #e5e7eb;
-    color: #9ca3af;
-  }
-
-  button.secondary:not(:disabled):hover {
-    background: #d1d5db;
-  }
-
   .layout {
+    display: flex;
     flex-wrap: wrap;
     gap: 1.5rem;
     align-items: stretch;
   }
 
   .controls {
+    display: flex;
     flex-direction: column;
     gap: 1.5rem;
     flex: 1 1 520px;
@@ -1129,6 +789,7 @@
   }
 
   .control-group {
+    display: flex;
     padding: 1.25rem;
     background: #fff;
     border-radius: 1rem;
@@ -1137,249 +798,55 @@
     gap: 1rem;
   }
 
-  .control-group h2 {
-    margin: 0;
-    font-size: 1.1rem;
-  }
-
-  .actions {
-    gap: 0.75rem;
-    flex-wrap: wrap;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
-    table-layout: fixed;
-  }
-
-  th,
-  td {
-    padding: 0.45rem;
-    text-align: left;
-    border-bottom: 1px solid #e5e7eb;
-    word-break: break-word;
-  }
-
-  tr.selected {
-    background: rgba(79, 70, 229, 0.1);
-  }
-
-  .buttons-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 0.75rem;
-  }
-
-  .preview-wrapper {
-    flex-direction: column;
-    gap: 1rem;
-    flex: 1 1 360px;
-    min-width: 320px;
-    max-width: 720px;
-  }
-
-  .mat-container {
-    width: 100%;
-    max-width: 100%;
-    margin: 0 auto;
-    overflow: auto;
-    padding: 0.5rem;
-    box-sizing: border-box;
-  }
-
-  .mat {
-    position: relative;
-    border: 4px solid #111827;
-    border-radius: 0.75rem;
-    background: repeating-linear-gradient(
-      45deg,
-      rgba(249, 250, 251, 1),
-      rgba(249, 250, 251, 1) 12px,
-      rgba(243, 244, 246, 1) 12px,
-      rgba(243, 244, 246, 1) 24px
-    );
-    box-shadow: inset 0 0 30px rgba(15, 23, 42, 0.2);
-    overflow: hidden;
-    cursor: pointer;
-    margin: 0 auto;
-  }
-
-  .mat:focus-visible {
-    outline: none;
-    box-shadow:
-      inset 0 0 30px rgba(15, 23, 42, 0.2),
-      inset 0 0 0 4px rgba(99, 102, 241, 0.4);
-  }
-
-  .mat::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    box-shadow: inset 0 0 0 20px rgba(229, 231, 235, 0.35);
-  }
-
-  .preview-window {
-    position: absolute;
-    border: 3px solid rgba(99, 102, 241, 0.9);
-    background: rgba(255, 255, 255, 0.85);
+  :global(.mat-designer button) {
+    padding: 0.5rem 0.75rem;
+    border: none;
     border-radius: 0.5rem;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
-    padding: 0.5rem;
-    text-align: center;
-    transition: transform 0.1s ease, box-shadow 0.1s ease;
+    background: #4f46e5;
+    color: #fff;
     cursor: pointer;
+    transition: background 0.2s ease;
+    font: inherit;
   }
 
-
-  .preview-window:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 25px rgba(59, 130, 246, 0.25);
+  :global(.mat-designer button:disabled) {
+    background: #9ca3af;
+    cursor: not-allowed;
   }
 
-  .preview-window:focus-visible {
-    outline: 3px solid rgba(34, 197, 94, 0.75);
-    outline-offset: 2px;
+  :global(.mat-designer button:not(:disabled):hover) {
+    background: #4338ca;
   }
 
-  .preview-window.selected {
-    border-color: #22c55e;
-    background: rgba(236, 253, 245, 0.95);
+  :global(.mat-designer button.secondary) {
+    background: #e5e7eb;
+    color: #1f2937;
   }
 
-  .preview-window span {
-    font-weight: 600;
-    font-size: 0.95rem;
+  :global(.mat-designer button.secondary:disabled) {
+    background: #e5e7eb;
+    color: #9ca3af;
   }
 
-  .preview-window small {
-    font-size: 0.75rem;
-    color: #4b5563;
+  :global(.mat-designer button.secondary:not(:disabled):hover) {
+    background: #d1d5db;
   }
 
-  .dimension {
-    position: absolute;
-    pointer-events: none;
-    color: #111827;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    z-index: 2;
+  :global(.mat-designer input[type='number']),
+  :global(.mat-designer input[type='text']),
+  :global(.mat-designer select) {
+    padding: 0.5rem 0.65rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    background: #fff;
+    font: inherit;
   }
 
-  .dimension span {
-    display: inline-block;
-    padding: 0.1rem 0.45rem;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid rgba(17, 24, 39, 0.18);
-    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
-  }
-
-  .dimension.horizontal {
-    height: 1px;
-  }
-
-  .dimension.horizontal::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    border-top: 1px solid rgba(17, 24, 39, 0.55);
-  }
-
-  .dimension.horizontal span {
-    position: absolute;
-    left: 50%;
-    transform: translate(-50%, -160%);
-  }
-
-  .dimension.horizontal.below span {
-    transform: translate(-50%, 30%);
-  }
-
-  .dimension.vertical {
-    width: 1px;
-  }
-
-  .dimension.vertical::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    border-left: 1px solid rgba(17, 24, 39, 0.55);
-  }
-
-  .dimension.vertical span {
-    position: absolute;
-    top: 50%;
-    left: 0;
-    transform: translate(-120%, -50%) rotate(-90deg);
-    transform-origin: center;
-  }
-
-  .dimension.vertical.right span {
-    transform: translate(120%, -50%) rotate(-90deg);
-  }
-
-  .dimension.mat-dimension span {
-    background: rgba(37, 99, 235, 0.12);
-    border-color: rgba(37, 99, 235, 0.25);
-  }
-
-  .dimension.mat-dimension::before {
-    border-color: rgba(37, 99, 235, 0.45);
-  }
-
-  .dimension.margin span {
-    background: rgba(253, 230, 138, 0.45);
-    border-color: rgba(202, 138, 4, 0.45);
-  }
-
-  .dimension.margin.horizontal::before {
-    border-top-color: rgba(202, 138, 4, 0.55);
-  }
-
-  .dimension.margin.vertical::before {
-    border-left-color: rgba(202, 138, 4, 0.55);
-  }
-
-  .dimension.spacing span {
-    background: rgba(191, 219, 254, 0.3);
-    border-color: rgba(37, 99, 235, 0.35);
-  }
-
-  .dimension.spacing.horizontal::before {
-    border-top-color: rgba(37, 99, 235, 0.55);
-    border-top-style: dashed;
-  }
-
-  .dimension.spacing.vertical::before {
-    border-left-color: rgba(37, 99, 235, 0.55);
-    border-left-style: dashed;
-  }
-
-  .clear-selection {
-    align-self: flex-end;
-    background: #6b7280;
-  }
-
-  .clear-selection:not(:disabled):hover {
-    background: #4b5563;
-  }
-
-  .scale {
-    font-size: 0.85rem;
-    color: #6b7280;
-    font-weight: 500;
+  :global(.mat-designer input[type='number']:focus),
+  :global(.mat-designer input[type='text']:focus),
+  :global(.mat-designer select:focus) {
+    outline: 2px solid #4f46e5;
+    outline-offset: 1px;
   }
 
   @media (max-width: 1024px) {
@@ -1387,21 +854,42 @@
       flex-direction: column;
     }
 
-    .controls,
-    .preview-wrapper {
+    .controls {
+      flex: 1 1 100%;
+      min-width: 0;
       max-width: none;
     }
   }
+
+  @media (max-width: 640px) {
+    .designer {
+      padding: 1.25rem 0.75rem;
+    }
+
+    .layout {
+      gap: 1rem;
+    }
+
+    .controls {
+      gap: 1rem;
+      min-width: 0;
+    }
+
+    .control-group {
+      padding: 1rem;
+    }
+  }
+
   @media print {
-    :global(body) {
+    :global(.mat-designer) {
       background: #fff;
       color: #000;
     }
 
-    header,
-    .controls,
-    .history-actions,
-    .clear-selection {
+    :global(.mat-designer header),
+    :global(.mat-designer .controls),
+    :global(.mat-designer .history-actions),
+    :global(.mat-designer .clear-selection) {
       display: none !important;
     }
 
@@ -1414,18 +902,15 @@
       display: block;
     }
 
-    .preview-wrapper {
-      max-width: none;
-    }
-
-    .mat-container {
+    :global(.mat-designer .mat-container) {
       overflow: visible !important;
       padding: 0;
     }
 
-    .mat {
+    :global(.mat-designer .mat) {
       box-shadow: none;
     }
   }
 </style>
+
 
