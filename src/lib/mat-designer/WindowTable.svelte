@@ -19,7 +19,8 @@
     Remove Selected
   </button>
 </div>
-<table>
+<div class="table-wrapper">
+  <table>
   <thead>
     <tr>
       <th></th>
@@ -97,6 +98,7 @@
     {/each}
   </tbody>
 </table>
+</div>
 
 <style>
   h2 {
@@ -110,11 +112,17 @@
     flex-wrap: wrap;
   }
 
+  .table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+  }
+
   table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.9rem;
     table-layout: fixed;
+    min-width: 520px;
   }
 
   th,
@@ -123,6 +131,11 @@
     text-align: left;
     border-bottom: 1px solid #e5e7eb;
     word-break: break-word;
+  }
+
+  td input {
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   tr.selected {
@@ -136,6 +149,14 @@
 
     .actions button {
       width: 100%;
+    }
+
+    .table-wrapper {
+      overflow: visible;
+    }
+
+    table {
+      min-width: 0;
     }
 
     table,
