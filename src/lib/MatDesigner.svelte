@@ -351,7 +351,7 @@
       .filter((window) => selectedSet.has(window.id))
       .sort((a, b) => (direction === "horizontal" ? a.x - b.x : a.y - b.y));
 
-    if (targets.length < 3) return;
+    if (targets.length < 2) return;
 
     const totalSpan = direction === "horizontal" ? matWidth : matHeight;
     const usedSpace = targets.reduce(
@@ -370,56 +370,6 @@
           cursor += window.width + gap;
         } else {
           updated.y = cursor;
-          cursor += window.height + gap;
-        }
-        updates.set(window.id, clampWindow(updated));
-      });
-      windows = windows.map((window) => updates.get(window.id) ?? window);
-    });
-  }
-
-  function spaceEvenly(direction: "horizontal" | "vertical") {
-    const selectedSet = new Set(selectedIds);
-    const targets = windows
-      .filter((window) => selectedSet.has(window.id))
-      .sort((a, b) => (direction === "horizontal" ? a.x - b.x : a.y - b.y));
-
-    if (targets.length < 2) return;
-
-    const first = targets[0];
-    const last = targets[targets.length - 1];
-    const start = direction === "horizontal" ? first.x : first.y;
-    const end =
-      direction === "horizontal"
-        ? last.x + last.width
-        : last.y + last.height;
-
-    const totalSpan = targets.reduce(
-      (sum, window) =>
-        sum + (direction === "horizontal" ? window.width : window.height),
-      0
-    );
-
-    const interiorSpace = Math.max(end - start - totalSpan, 0);
-    const gap = targets.length > 1 ? interiorSpace / (targets.length - 1) : 0;
-
-    mutate(() => {
-      let cursor = start;
-      const updates = new Map<number, MatWindow>();
-      targets.forEach((window, index) => {
-        const updated = { ...window };
-        if (direction === "horizontal") {
-          updated.x = index === targets.length - 1
-            ? end - window.width
-            : cursor;
-        } else {
-          updated.y = index === targets.length - 1
-            ? end - window.height
-            : cursor;
-        }
-        if (direction === "horizontal") {
-          cursor += window.width + gap;
-        } else {
           cursor += window.height + gap;
         }
         updates.set(window.id, clampWindow(updated));
@@ -890,17 +840,11 @@
           <button type="button" on:click={() => centerSelected("vertical")} disabled={!selectedCount}>
             Center Vertically
           </button>
-          <button type="button" on:click={() => distribute("horizontal")} disabled={selectedCount < 3}>
+          <button type="button" on:click={() => distribute("horizontal")} disabled={selectedCount < 2}>
             Distribute Across Mat (Horizontal)
           </button>
-          <button type="button" on:click={() => distribute("vertical")} disabled={selectedCount < 3}>
+          <button type="button" on:click={() => distribute("vertical")} disabled={selectedCount < 2}>
             Distribute Across Mat (Vertical)
-          </button>
-          <button type="button" on:click={() => spaceEvenly("horizontal")} disabled={selectedCount < 2}>
-            Space Evenly (Horizontal)
-          </button>
-          <button type="button" on:click={() => spaceEvenly("vertical")} disabled={selectedCount < 2}>
-            Space Evenly (Vertical)
           </button>
         </div>
       </div>
