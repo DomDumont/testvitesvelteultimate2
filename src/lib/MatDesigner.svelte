@@ -4,7 +4,15 @@
   import WindowTable from './mat-designer/WindowTable.svelte';
   import ArrangeControls from './mat-designer/ArrangeControls.svelte';
   import MatPreviewPanel from './mat-designer/MatPreviewPanel.svelte';
-  import type { MatWindow, EditableWindowKey, MatDesignerState, PositionedWindow, MatDimensionOverlay, ExtraDimension } from './mat-designer/types';
+  import type {
+    MatWindow,
+    EditableWindowKey,
+    MatDesignerState,
+    PositionedWindow,
+    MatDimensionOverlay,
+    ExtraDimension,
+    Unit
+  } from './mat-designer/types';
 
   const MIN_SIZE_MM = 20;
   const PREVIEW_MAX_WIDTH = 600;
@@ -19,8 +27,6 @@
   const DIMENSION_SAFE_PADDING = 12;
 
   const STORAGE_KEY = 'mat-designer-state/v1';
-
-  type Unit = 'mm' | 'cm' | 'in';
 
   const unitOptions: Unit[] = ['mm', 'cm', 'in'];
   const UNIT_TO_MM: Record<Unit, number> = {
@@ -131,7 +137,7 @@
       if (!parsed || typeof parsed !== 'object') return null;
       if (typeof parsed.matWidth !== 'number' || typeof parsed.matHeight !== 'number') return null;
 
-      const persistedUnit =
+      const persistedUnit: Unit =
         typeof parsed.unit === 'string' && isUnit(parsed.unit) ? parsed.unit : unit;
       const minForPersistedUnit = convertMeasurement(MIN_SIZE_MM, 'mm', persistedUnit);
       const fallbackWidth = convertMeasurement(matWidth, unit, persistedUnit);
@@ -824,24 +830,26 @@
         />
       </div>
     </div>
-    <MatPreviewPanel
-      bind:containerWidth={previewContainerWidth}
-      positionedWindows={positionedWindows}
-      matDimensions={matDimensions}
-      extraDimensions={extraDimensions}
-      unit={unit}
-      scaledMatWidth={scaledMatWidth}
-      scaledMatHeight={scaledMatHeight}
-      selectedIdSet={selectedIdSet}
-      formatMeasurement={formatMeasurement}
-      matWidth={matWidth}
-      matHeight={matHeight}
-      clearSelection={clearSelection}
-      toggleSelection={toggleSelection}
-      altKey={altKey}
-      handleKeyActivate={handleKeyActivate}
-      selectedCount={selectedCount}
-    />
+    <div class="preview-area">
+      <MatPreviewPanel
+        bind:containerWidth={previewContainerWidth}
+        positionedWindows={positionedWindows}
+        matDimensions={matDimensions}
+        extraDimensions={extraDimensions}
+        unit={unit}
+        scaledMatWidth={scaledMatWidth}
+        scaledMatHeight={scaledMatHeight}
+        selectedIdSet={selectedIdSet}
+        formatMeasurement={formatMeasurement}
+        matWidth={matWidth}
+        matHeight={matHeight}
+        clearSelection={clearSelection}
+        toggleSelection={toggleSelection}
+        altKey={altKey}
+        handleKeyActivate={handleKeyActivate}
+        selectedCount={selectedCount}
+      />
+    </div>
   </div>
 </section>
 
@@ -849,123 +857,125 @@
   :global(body) {
     margin: 0;
     font-family: 'Inter', system-ui, sans-serif;
-    background: #f4f4f5;
+    background: #fafafa;
     color: #1f2937;
   }
 
   .designer {
     display: flex;
-    max-width: 1120px;
+    max-width: 960px;
     margin: 0 auto;
-    padding: 2rem;
+    padding: 1.5rem 1rem;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1rem;
   }
 
   .layout {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 1.5rem;
-    align-items: stretch;
+    align-items: center;
   }
 
   .controls {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
-    flex: 1 1 520px;
-    min-width: 360px;
+    gap: 1rem;
+    width: 100%;
+    max-width: 720px;
+  }
+
+  .preview-area {
+    width: 100%;
+    display: flex;
+    justify-content: center;
   }
 
   .control-group {
     display: flex;
-    padding: 1.25rem;
+    padding: 1rem;
     background: #fff;
-    border-radius: 1rem;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
+    border-radius: 0.75rem;
+    border: 1px solid #e5e7eb;
+    box-shadow: none;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   :global(.mat-designer button) {
-    padding: 0.5rem 0.75rem;
-    border: none;
-    border-radius: 0.5rem;
-    background: #4f46e5;
+    padding: 0.4rem 0.7rem;
+    border-radius: 0.375rem;
+    border: 1px solid #2563eb;
+    background: #2563eb;
     color: #fff;
     cursor: pointer;
-    transition: background 0.2s ease;
     font: inherit;
+    font-size: 0.9rem;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
   }
 
   :global(.mat-designer button:disabled) {
-    background: #9ca3af;
+    background: #f3f4f6;
+    border-color: #e5e7eb;
+    color: #9ca3af;
     cursor: not-allowed;
   }
 
   :global(.mat-designer button:not(:disabled):hover) {
-    background: #4338ca;
+    background: #1d4ed8;
+    border-color: #1d4ed8;
   }
 
   :global(.mat-designer button.secondary) {
-    background: #e5e7eb;
+    background: #fff;
     color: #1f2937;
+    border-color: #d1d5db;
   }
 
   :global(.mat-designer button.secondary:disabled) {
-    background: #e5e7eb;
+    background: #f9fafb;
+    border-color: #e5e7eb;
     color: #9ca3af;
   }
 
   :global(.mat-designer button.secondary:not(:disabled):hover) {
-    background: #d1d5db;
+    background: #f3f4f6;
+    border-color: #cbd5f5;
   }
 
   :global(.mat-designer input[type='number']),
   :global(.mat-designer input[type='text']),
   :global(.mat-designer select) {
-    padding: 0.5rem 0.65rem;
+    padding: 0.4rem 0.6rem;
     border: 1px solid #d1d5db;
-    border-radius: 0.5rem;
+    border-radius: 0.375rem;
     background: #fff;
     font: inherit;
+    font-size: 0.95rem;
   }
 
   :global(.mat-designer input[type='number']:focus),
   :global(.mat-designer input[type='text']:focus),
   :global(.mat-designer select:focus) {
-    outline: 2px solid #4f46e5;
+    outline: 2px solid #2563eb;
     outline-offset: 1px;
-  }
-
-  @media (max-width: 1024px) {
-    .layout {
-      flex-direction: column;
-    }
-
-    .controls {
-      flex: 1 1 100%;
-      min-width: 0;
-      max-width: none;
-    }
   }
 
   @media (max-width: 640px) {
     .designer {
-      padding: 1.25rem 0.75rem;
+      padding: 1rem 0.75rem;
     }
 
     .layout {
-      gap: 1rem;
+      gap: 1.25rem;
     }
 
     .controls {
-      gap: 1rem;
-      min-width: 0;
+      gap: 0.75rem;
     }
 
     .control-group {
-      padding: 1rem;
+      padding: 0.75rem;
     }
   }
 

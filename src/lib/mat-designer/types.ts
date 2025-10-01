@@ -1,3 +1,5 @@
+export type Unit = 'mm' | 'cm' | 'in';
+
 export type MatWindow = {
   id: number;
   name: string;
@@ -12,7 +14,7 @@ export type EditableWindowKey = 'name' | 'x' | 'y' | 'width' | 'height';
 export type MatDesignerState = {
   matWidth: number;
   matHeight: number;
-  unit: string;
+  unit: Unit;
   windows: MatWindow[];
   selectedIds: number[];
   idCounter: number;

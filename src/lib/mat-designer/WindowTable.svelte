@@ -103,12 +103,13 @@
 <style>
   h2 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 1rem;
+    font-weight: 600;
   }
 
   .actions {
     display: flex;
-    gap: 0.75rem;
+    gap: 0.6rem;
     flex-wrap: wrap;
   }
 
@@ -120,14 +121,14 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     table-layout: fixed;
-    min-width: 520px;
+    min-width: 500px;
   }
 
   th,
   td {
-    padding: 0.75rem;
+    padding: 0.5rem;
     text-align: left;
     border-bottom: 1px solid #e5e7eb;
     word-break: break-word;
@@ -139,12 +140,13 @@
   }
 
   tr.selected {
-    background: rgba(79, 70, 229, 0.1);
+    background: rgba(37, 99, 235, 0.08);
   }
 
   @media (max-width: 640px) {
     .actions {
       flex-direction: column;
+      gap: 0.5rem;
     }
 
     .actions button {
@@ -184,16 +186,16 @@
     tbody {
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      gap: 0.6rem;
     }
 
     tr {
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
-      padding: 0.75rem;
+      gap: 0.45rem;
+      padding: 0.6rem;
       border: 1px solid #e5e7eb;
-      border-radius: 0.75rem;
+      border-radius: 0.6rem;
       background: #fff;
     }
 
@@ -201,7 +203,7 @@
       display: flex;
       flex-direction: column;
       align-items: stretch;
-      gap: 0.5rem;
+      gap: 0.35rem;
       padding: 0;
       border: 0;
       width: 100%;
@@ -211,7 +213,7 @@
       content: attr(data-label);
       font-weight: 600;
       color: #4b5563;
-      font-size: 0.85rem;
+      font-size: 0.8rem;
     }
 
     td input[type='text'],
@@ -223,7 +225,7 @@
     td:first-child {
       flex-direction: row;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.4rem;
     }
 
     td:first-child::before {
