@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { MatPreset } from './types';
+
   export let matWidth: number;
   export let matHeight: number;
   export let unit: string;
@@ -13,6 +15,17 @@
   export let onUndo: () => void;
   export let onRedo: () => void;
   export let onPrint: () => void;
+  export let presets: MatPreset[];
+  export let selectedPresetId: string | null;
+  export let newPresetName: string;
+  export let canLoadPreset: boolean;
+  export let canDeletePreset: boolean;
+  export let canSavePreset: boolean;
+  export let onPresetSelect: (event: Event) => void;
+  export let onPresetLoad: () => void;
+  export let onPresetDelete: () => void;
+  export let onPresetNameInput: (event: Event) => void;
+  export let onPresetSave: () => void;
 </script>
 
 <header>
@@ -76,69 +89,131 @@
     </label>
     <span class="scale">Preview scale: {(previewScale * 100).toFixed(0)}%</span>
   </div>
+  <div class="preset-controls">
+    <label class="preset-row">
+      Presets
+      <div class="preset-actions">
+        <select value={selectedPresetId ?? ''} on:change={onPresetSelect}>
+          <option value="">Select preset…</option>
+          {#each presets as preset}
+            <option value={preset.id} selected={preset.id === selectedPresetId}>
+              {preset.name}
+            </option>
+          {/each}
+        </select>
+        <button type="button" class="secondary" on:click={onPresetLoad} disabled={!canLoadPreset}>
+          Load
+        </button>
+        <button type="button" class="secondary" on:click={onPresetDelete} disabled={!canDeletePreset}>
+          Delete
+        </button>
+      </div>
+    </label>
+    <label class="preset-row">
+      Save preset
+      <div class="preset-actions">
+        <input
+          type="text"
+          value={newPresetName}
+          placeholder="Preset name"
+          on:input={onPresetNameInput}
+        />
+        <button type="button" on:click={onPresetSave} disabled={!canSavePreset}>
+          Save
+        </button>
+      </div>
+    </label>
+  </div>
 </header>
 
 <style>
   header {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .header-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 0.75rem;
     flex-wrap: wrap;
   }
 
   h1 {
     margin: 0;
-    font-size: 1.75rem;
+    font-size: 1.35rem;
+    font-weight: 600;
   }
 
   .history-actions {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.4rem;
     align-items: center;
     justify-content: flex-end;
+    flex-wrap: wrap;
   }
 
   .mat-controls {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
     align-items: end;
   }
 
   label {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
-    font-size: 0.9rem;
+    gap: 0.3rem;
+    font-size: 0.85rem;
     font-weight: 600;
+    color: #374151;
   }
 
   .scale {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: #6b7280;
     font-weight: 500;
+    align-self: end;
+  }
+
+  .preset-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .preset-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .preset-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .preset-actions select,
+  .preset-actions input {
+    flex: 1;
   }
 
   @media (max-width: 768px) {
-    header {
-      gap: 0.75rem;
-    }
-
     .mat-controls {
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.6rem;
     }
   }
 
   @media (max-width: 640px) {
     h1 {
-      font-size: 1.5rem;
+      font-size: 1.25rem;
     }
 
     .header-row {
@@ -147,7 +222,20 @@
 
     .history-actions {
       width: 100%;
-      justify-content: space-between;
+      justify-content: flex-start;
+    }
+
+    .preset-controls {
+      grid-template-columns: 1fr;
+      gap: 0.6rem;
+    }
+
+    .preset-actions {
+      flex-wrap: wrap;
+    }
+
+    .preset-actions button {
+      flex: 1 1 100px;
     }
   }
 </style>

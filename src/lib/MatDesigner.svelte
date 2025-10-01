@@ -4,9 +4,18 @@
   import WindowTable from './mat-designer/WindowTable.svelte';
   import ArrangeControls from './mat-designer/ArrangeControls.svelte';
   import MatPreviewPanel from './mat-designer/MatPreviewPanel.svelte';
-  import type { MatWindow, EditableWindowKey, MatDesignerState, PositionedWindow, MatDimensionOverlay, ExtraDimension } from './mat-designer/types';
+  import type {
+    MatWindow,
+    EditableWindowKey,
+    MatDesignerState,
+    PositionedWindow,
+    MatDimensionOverlay,
+    ExtraDimension,
+    Unit,
+    MatPreset
+  } from './mat-designer/types';
 
-  const MIN_SIZE = 20;
+  const MIN_SIZE_MM = 20;
   const PREVIEW_MAX_WIDTH = 600;
   const PREVIEW_MAX_HEIGHT = 420;
   const HISTORY_LIMIT = 100;
@@ -19,10 +28,24 @@
   const DIMENSION_SAFE_PADDING = 12;
 
   const STORAGE_KEY = 'mat-designer-state/v1';
+  const PRESETS_STORAGE_KEY = 'mat-designer-presets/v1';
+  const DEFAULT_PRESET_PREFIX = 'default-';
+
+  const unitOptions: Unit[] = ['mm', 'cm', 'in'];
+  const UNIT_TO_MM: Record<Unit, number> = {
+    mm: 1,
+    cm: 10,
+    in: 25.4
+  };
+  const ROUND_PRECISION = 1000;
 
   let matWidth = 500;
   let matHeight = 350;
-  let unit = "mm";
+  let unit: Unit = 'mm';
+  let minSize = MIN_SIZE_MM;
+  let unitScale = UNIT_TO_MM[unit];
+  let matWidthMm = matWidth * unitScale;
+  let matHeightMm = matHeight * unitScale;
   let idCounter = 0;
 
   function createWindow({
@@ -52,6 +75,14 @@
   let past: MatDesignerState[] = [];
   let future: MatDesignerState[] = [];
 
+  let presets: MatPreset[] = [];
+  let selectedPresetId: string | null = null;
+  let activePresetId: string | null = null;
+  let newPresetName = '';
+  let canLoadPreset = false;
+  let canDeletePreset = false;
+  let canSavePreset = false;
+
   let previewContainerWidth = PREVIEW_MAX_WIDTH;
 
   let previewScale = 1;
@@ -62,6 +93,7 @@
   let spacingDimensions: ExtraDimension[] = [];
 
   let storageReady = false;
+  let suppressPresetReset = false;
 
   let positionedWindows: PositionedWindow[] = [];
   let matDimensions: MatDimensionOverlay = {
@@ -69,25 +101,223 @@
     vertical: { left: 0, top: 0, length: 0 }
   };
 
-  const unitOptions = ["mm", "cm", "in"];
-
   const altKey = (event: MouseEvent | KeyboardEvent) =>
     event.shiftKey || event.metaKey || event.ctrlKey;
 
-  function sanitizeDimension(value: number, fallback: number) {
+  function sanitizeDimension(value: number, fallback: number, minimum = minSize) {
     if (!Number.isFinite(value)) return fallback;
-    return Math.max(value, MIN_SIZE);
+    return Math.max(value, minimum);
   }
 
   function cloneWindows(list: MatWindow[]): MatWindow[] {
     return list.map((window) => ({ ...window }));
   }
 
+  function cloneState(state: MatDesignerState): MatDesignerState {
+    return {
+      matWidth: state.matWidth,
+      matHeight: state.matHeight,
+      unit: state.unit,
+      windows: cloneWindows(state.windows),
+      selectedIds: [...state.selectedIds],
+      idCounter: state.idCounter
+    };
+  }
+
+  function clonePreset(preset: MatPreset): MatPreset {
+    return {
+      id: preset.id,
+      name: preset.name,
+      createdAt: preset.createdAt,
+      updatedAt: preset.updatedAt,
+      state: cloneState(preset.state)
+    };
+  }
+
+  const DEFAULT_PRESETS = createDefaultPresets();
+
+  function createDefaultPresets(): MatPreset[] {
+    const classicPortrait: MatDesignerState = {
+      matWidth: 280,
+      matHeight: 356,
+      unit: 'mm',
+      windows: [
+        {
+          id: 1,
+          name: 'Portrait Opening',
+          x: 38.5,
+          y: 51,
+          width: 203,
+          height: 254
+        }
+      ],
+      selectedIds: [],
+      idCounter: 1
+    };
+
+    const galleryDuo: MatDesignerState = {
+      matWidth: 457,
+      matHeight: 356,
+      unit: 'mm',
+      windows: [
+        {
+          id: 1,
+          name: 'Left Opening',
+          x: 70,
+          y: 89,
+          width: 127,
+          height: 178
+        },
+        {
+          id: 2,
+          name: 'Right Opening',
+          x: 260,
+          y: 89,
+          width: 127,
+          height: 178
+        }
+      ],
+      selectedIds: [],
+      idCounter: 2
+    };
+
+    const panoramicTriptych: MatDesignerState = {
+      matWidth: 635,
+      matHeight: 305,
+      unit: 'mm',
+      windows: [
+        {
+          id: 1,
+          name: 'Panel A',
+          x: 52.5,
+          y: 47.5,
+          width: 150,
+          height: 210
+        },
+        {
+          id: 2,
+          name: 'Panel B',
+          x: 242.5,
+          y: 47.5,
+          width: 150,
+          height: 210
+        },
+        {
+          id: 3,
+          name: 'Panel C',
+          x: 432.5,
+          y: 47.5,
+          width: 150,
+          height: 210
+        }
+      ],
+      selectedIds: [],
+      idCounter: 3
+    };
+
+    const titleBlockPortrait: MatDesignerState = {
+      matWidth: 280,
+      matHeight: 356,
+      unit: 'mm',
+      windows: [
+        {
+          id: 1,
+          name: 'Artwork Opening',
+          x: 38.5,
+          y: 30,
+          width: 203,
+          height: 254
+        },
+        {
+          id: 2,
+          name: 'Title Window',
+          x: 60,
+          y: 304,
+          width: 160,
+          height: 40
+        }
+      ],
+      selectedIds: [],
+      idCounter: 2
+    };
+
+    const defaults: Array<{ id: string; name: string; state: MatDesignerState }> = [
+      {
+        id: `${DEFAULT_PRESET_PREFIX}classic-portrait`,
+        name: 'Classic Portrait 8x10',
+        state: classicPortrait
+      },
+      {
+        id: `${DEFAULT_PRESET_PREFIX}gallery-duo`,
+        name: 'Gallery Duo 5x7',
+        state: galleryDuo
+      },
+      {
+        id: `${DEFAULT_PRESET_PREFIX}panoramic-triptych`,
+        name: 'Panoramic Triptych',
+        state: panoramicTriptych
+      },
+      {
+        id: `${DEFAULT_PRESET_PREFIX}title-block`,
+        name: 'Museum Title Block',
+        state: titleBlockPortrait
+      }
+    ];
+
+    return defaults.map((entry, index) => ({
+      id: entry.id,
+      name: entry.name,
+      createdAt: index,
+      updatedAt: index,
+      state: cloneState(entry.state)
+    }));
+  }
+
+  function isDefaultPreset(id: string | null | undefined): boolean {
+    return Boolean(id && id.startsWith(DEFAULT_PRESET_PREFIX));
+  }
+
+  function buildPresetList(customPresets: MatPreset[]): MatPreset[] {
+    const defaults = DEFAULT_PRESETS.map(clonePreset);
+    const customs = customPresets
+      .filter((preset) => !isDefaultPreset(preset.id))
+      .map(clonePreset);
+
+    const combined = [...defaults, ...customs];
+    combined.sort((a, b) => {
+      const aDefault = isDefaultPreset(a.id);
+      const bDefault = isDefaultPreset(b.id);
+      if (aDefault && !bDefault) return -1;
+      if (!aDefault && bDefault) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    return combined;
+  }
+
   const clampValue = (value: number, min = 0, max = Number.POSITIVE_INFINITY) =>
     Math.min(Math.max(value, min), max);
 
+  function roundMeasurement(value: number) {
+    return Math.round(value * ROUND_PRECISION) / ROUND_PRECISION;
+  }
+
+  function convertMeasurement(value: number, from: Unit, to: Unit) {
+    if (from === to) return value;
+    const millimetres = value * UNIT_TO_MM[from];
+    return roundMeasurement(millimetres / UNIT_TO_MM[to]);
+  }
+
+  function isUnit(value: string): value is Unit {
+    return value === 'mm' || value === 'cm' || value === 'in';
+  }
+
+  $: minSize = convertMeasurement(MIN_SIZE_MM, 'mm', unit);
+  $: unitScale = UNIT_TO_MM[unit];
+  $: matWidthMm = matWidth * unitScale;
+  $: matHeightMm = matHeight * unitScale;
+
   function formatMeasurement(length: number) {
-    const rounded = Math.round(length);
+    const rounded = roundMeasurement(length);
     return `${rounded} ${unit}`;
   }
 
@@ -100,26 +330,37 @@
       if (!parsed || typeof parsed !== 'object') return null;
       if (typeof parsed.matWidth !== 'number' || typeof parsed.matHeight !== 'number') return null;
 
+      const persistedUnit: Unit =
+        typeof parsed.unit === 'string' && isUnit(parsed.unit) ? parsed.unit : unit;
+      const minForPersistedUnit = convertMeasurement(MIN_SIZE_MM, 'mm', persistedUnit);
+      const fallbackWidth = convertMeasurement(matWidth, unit, persistedUnit);
+      const fallbackHeight = convertMeasurement(matHeight, unit, persistedUnit);
+
       const sanitizedWindows = Array.isArray(parsed.windows)
         ? parsed.windows
             .filter(Boolean)
-            .map((window) => ({
-              id: Number((window as MatWindow).id) || 0,
-              name:
-                typeof (window as MatWindow).name === 'string'
-                  ? (window as MatWindow).name
-                  : `Window ${Number((window as MatWindow).id) || 0}`,
-              x: Number((window as MatWindow).x) || 0,
-              y: Number((window as MatWindow).y) || 0,
-              width: Number((window as MatWindow).width) || MIN_SIZE,
-              height: Number((window as MatWindow).height) || MIN_SIZE
-            }))
+            .map((window) => {
+              const candidate = window as MatWindow;
+              const width = Number(candidate.width);
+              const height = Number(candidate.height);
+              return {
+                id: Number(candidate.id) || 0,
+                name:
+                  typeof candidate.name === 'string'
+                    ? candidate.name
+                    : `Window ${Number(candidate.id) || 0}`,
+                x: Number(candidate.x) || 0,
+                y: Number(candidate.y) || 0,
+                width: sanitizeDimension(width, minForPersistedUnit, minForPersistedUnit),
+                height: sanitizeDimension(height, minForPersistedUnit, minForPersistedUnit)
+              };
+            })
         : [];
 
       return {
-        matWidth: sanitizeDimension(parsed.matWidth, matWidth),
-        matHeight: sanitizeDimension(parsed.matHeight, matHeight),
-        unit: typeof parsed.unit === 'string' ? parsed.unit : unit,
+        matWidth: sanitizeDimension(parsed.matWidth, fallbackWidth, minForPersistedUnit),
+        matHeight: sanitizeDimension(parsed.matHeight, fallbackHeight, minForPersistedUnit),
+        unit: persistedUnit,
         windows: sanitizedWindows,
         selectedIds: Array.isArray(parsed.selectedIds) ? parsed.selectedIds.map(Number) : [],
         idCounter: typeof parsed.idCounter === 'number' ? parsed.idCounter : 0
@@ -137,6 +378,206 @@
     } catch (error) {
       console.warn('Failed to persist mat designer state', error);
     }
+  }
+
+  function loadPresetStore(): MatPreset[] {
+    if (typeof window === 'undefined' || !window.localStorage) return [];
+    try {
+      const raw = window.localStorage.getItem(PRESETS_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      const sanitized = parsed
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') return null;
+          const preset = entry as Partial<MatPreset>;
+          if (typeof preset.id !== 'string' || !preset.id) return null;
+          if (typeof preset.name !== 'string' || !preset.name.trim()) return null;
+          if (typeof preset.createdAt !== 'number' || typeof preset.updatedAt !== 'number') return null;
+          const state = preset.state as Partial<MatDesignerState> | undefined;
+          if (!state) return null;
+          if (
+            typeof state.matWidth !== 'number' ||
+            typeof state.matHeight !== 'number' ||
+            typeof state.unit !== 'string' ||
+            !isUnit(state.unit) ||
+            !Array.isArray(state.windows)
+          ) {
+            return null;
+          }
+
+          const sanitizedWindows = state.windows
+            .filter(Boolean)
+            .map((window) => {
+              const candidate = window as MatWindow;
+              return {
+                id: Number(candidate.id) || 0,
+                name:
+                  typeof candidate.name === 'string'
+                    ? candidate.name
+                    : `Window ${Number(candidate.id) || 0}`,
+                x: Number(candidate.x) || 0,
+                y: Number(candidate.y) || 0,
+                width: Number(candidate.width) || MIN_SIZE_MM,
+                height: Number(candidate.height) || MIN_SIZE_MM
+              };
+            });
+
+          return {
+            id: preset.id,
+            name: preset.name.trim(),
+            createdAt: preset.createdAt,
+            updatedAt: preset.updatedAt,
+            state: {
+              matWidth: state.matWidth,
+              matHeight: state.matHeight,
+              unit: state.unit,
+              windows: sanitizedWindows,
+              selectedIds: Array.isArray(state.selectedIds)
+                ? state.selectedIds.map(Number).filter((id) => Number.isFinite(id))
+                : [],
+              idCounter: typeof state.idCounter === 'number' ? state.idCounter : 0
+            }
+          } satisfies MatPreset;
+        })
+        .filter((value): value is MatPreset => Boolean(value));
+
+      return sanitized
+        .filter((preset) => !isDefaultPreset(preset.id))
+        .map((preset) => clonePreset(preset));
+    } catch (error) {
+      console.warn('Failed to load mat designer presets', error);
+      return [];
+    }
+  }
+
+  function persistPresets(list: MatPreset[]) {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    try {
+      window.localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(list));
+    } catch (error) {
+      console.warn('Failed to persist mat designer presets', error);
+    }
+  }
+
+  function handlePresetSelect(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement;
+    const value = select.value;
+    selectedPresetId = value || null;
+    if (!selectedPresetId) {
+      newPresetName = '';
+      return;
+    }
+    const preset = presets.find((entry) => entry.id === selectedPresetId);
+    newPresetName = preset ? preset.name : '';
+  }
+
+  function loadSelectedPreset() {
+    if (!selectedPresetId) return;
+    const preset = presets.find((entry) => entry.id === selectedPresetId);
+    if (!preset) return;
+    suppressPresetReset = true;
+    applyState({
+      matWidth: preset.state.matWidth,
+      matHeight: preset.state.matHeight,
+      unit: preset.state.unit,
+      windows: cloneWindows(preset.state.windows),
+      selectedIds: [...preset.state.selectedIds],
+      idCounter: preset.state.idCounter
+    });
+    windows = windows.map((window) => clampWindow(window));
+    past = [];
+    future = [];
+    suppressPresetReset = false;
+    activePresetId = preset.id;
+    newPresetName = preset.name;
+    if (storageReady) {
+      persistState(snapshot());
+    }
+  }
+
+  function deleteSelectedPreset() {
+    if (!selectedPresetId || isDefaultPreset(selectedPresetId)) return;
+
+    const existingCustomPresets = presets
+      .filter((preset) => !isDefaultPreset(preset.id))
+      .map(clonePreset);
+
+    const nextCustomPresets = existingCustomPresets.filter((preset) => preset.id !== selectedPresetId);
+    if (nextCustomPresets.length === existingCustomPresets.length) return;
+
+    persistPresets(nextCustomPresets);
+    presets = buildPresetList(nextCustomPresets);
+
+    if (activePresetId === selectedPresetId) {
+      activePresetId = null;
+    }
+
+    const nextSelection = presets.find((preset) => !isDefaultPreset(preset.id)) ?? presets[0] ?? null;
+    selectedPresetId = nextSelection ? nextSelection.id : null;
+    newPresetName = nextSelection ? nextSelection.name : '';
+  }
+
+  function savePreset() {
+    const trimmedName = newPresetName.trim();
+    if (!trimmedName) return;
+    const now = Date.now();
+    const currentSnapshot = snapshot();
+
+    const customPresets = presets
+      .filter((preset) => !isDefaultPreset(preset.id))
+      .map(clonePreset);
+
+    const existingIndex = selectedPresetId
+      ? customPresets.findIndex((preset) => preset.id === selectedPresetId)
+      : -1;
+    const byNameIndex = customPresets.findIndex(
+      (preset) => preset.name.toLowerCase() === trimmedName.toLowerCase()
+    );
+
+    let targetId: string;
+    if (existingIndex >= 0) {
+      const target = customPresets[existingIndex];
+      customPresets[existingIndex] = {
+        ...target,
+        name: trimmedName,
+        updatedAt: now,
+        state: currentSnapshot
+      };
+      targetId = customPresets[existingIndex].id;
+    } else if (byNameIndex >= 0) {
+      const target = customPresets[byNameIndex];
+      customPresets[byNameIndex] = {
+        ...target,
+        name: trimmedName,
+        updatedAt: now,
+        state: currentSnapshot
+      };
+      targetId = customPresets[byNameIndex].id;
+    } else {
+      const newPreset: MatPreset = {
+        id: `preset-${now}`,
+        name: trimmedName,
+        createdAt: now,
+        updatedAt: now,
+        state: currentSnapshot
+      };
+      customPresets.push(newPreset);
+      targetId = newPreset.id;
+    }
+
+    persistPresets(customPresets);
+    presets = buildPresetList(customPresets);
+
+    const activePreset = presets.find((preset) => preset.id === targetId) ?? presets[0] ?? null;
+    selectedPresetId = activePreset ? activePreset.id : null;
+    newPresetName = activePreset ? activePreset.name : '';
+    activePresetId = activePreset ? activePreset.id : null;
+  }
+
+  function handlePresetNameInput(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    newPresetName = input.value;
   }
 
   const MIN_OVERLAP_PX = 4;
@@ -231,14 +672,23 @@
       if (storageReady) {
         persistState(after);
       }
+      if (!suppressPresetReset) {
+        activePresetId = null;
+      }
     }
   }
 
-  function clampWindow(window: MatWindow): MatWindow {
-    const width = Math.min(Math.max(window.width, MIN_SIZE), matWidth);
-    const height = Math.min(Math.max(window.height, MIN_SIZE), matHeight);
-    const x = Math.min(Math.max(window.x, 0), matWidth - width);
-    const y = Math.min(Math.max(window.y, 0), matHeight - height);
+  function clampWindow(
+    window: MatWindow,
+    limits: { matWidth?: number; matHeight?: number; minSize?: number } = {}
+  ): MatWindow {
+    const limitWidth = limits.matWidth ?? matWidth;
+    const limitHeight = limits.matHeight ?? matHeight;
+    const minimum = limits.minSize ?? minSize;
+    const width = Math.min(Math.max(window.width, minimum), limitWidth);
+    const height = Math.min(Math.max(window.height, minimum), limitHeight);
+    const x = Math.min(Math.max(window.x, 0), Math.max(limitWidth - width, 0));
+    const y = Math.min(Math.max(window.y, 0), Math.max(limitHeight - height, 0));
     return { ...window, width, height, x, y };
   }
 
@@ -306,29 +756,45 @@
     });
   }
 
-  function alignSelected(edge: "left" | "right" | "top" | "bottom") {
+  function alignSelected(
+    alignment:
+      | "left"
+      | "right"
+      | "top"
+      | "bottom"
+      | "horizontal-center"
+      | "vertical-center"
+  ) {
+    if (selectedIds.length < 2) return;
+
+    const anchorId = selectedIds[selectedIds.length - 1];
+    const anchorWindow = windows.find((window) => window.id === anchorId);
+    if (!anchorWindow) return;
+
     const selectedSet = new Set(selectedIds);
-    const selectedWindows = windows.filter((window) => selectedSet.has(window.id));
-    if (selectedWindows.length < 2) return;
 
     let reference = 0;
-    if (edge === "left") reference = Math.min(...selectedWindows.map((window) => window.x));
-    if (edge === "right") {
-      reference = Math.max(...selectedWindows.map((window) => window.x + window.width));
+    if (alignment === "left") reference = anchorWindow.x;
+    if (alignment === "right") reference = anchorWindow.x + anchorWindow.width;
+    if (alignment === "top") reference = anchorWindow.y;
+    if (alignment === "bottom") reference = anchorWindow.y + anchorWindow.height;
+    if (alignment === "horizontal-center") {
+      reference = anchorWindow.x + anchorWindow.width / 2;
     }
-    if (edge === "top") reference = Math.min(...selectedWindows.map((window) => window.y));
-    if (edge === "bottom") {
-      reference = Math.max(...selectedWindows.map((window) => window.y + window.height));
+    if (alignment === "vertical-center") {
+      reference = anchorWindow.y + anchorWindow.height / 2;
     }
 
     mutate(() => {
       windows = windows.map((window) => {
         if (!selectedSet.has(window.id)) return window;
         const updated = { ...window };
-        if (edge === "left") updated.x = reference;
-        if (edge === "right") updated.x = reference - updated.width;
-        if (edge === "top") updated.y = reference;
-        if (edge === "bottom") updated.y = reference - updated.height;
+        if (alignment === "left") updated.x = reference;
+        if (alignment === "right") updated.x = reference - updated.width;
+        if (alignment === "top") updated.y = reference;
+        if (alignment === "bottom") updated.y = reference - updated.height;
+        if (alignment === "horizontal-center") updated.x = reference - updated.width / 2;
+        if (alignment === "vertical-center") updated.y = reference - updated.height / 2;
         return clampWindow(updated);
       });
     });
@@ -401,10 +867,33 @@
 
   function handleUnitChange(event: Event) {
     const select = event.currentTarget as HTMLSelectElement;
-    const nextUnit = select.value;
-    if (nextUnit === unit) return;
+    const nextUnitValue = select.value;
+    if (!isUnit(nextUnitValue)) return;
+    if (nextUnitValue === unit) return;
     mutate(() => {
-      unit = nextUnit;
+      const fromUnit = unit;
+      const nextMinSize = convertMeasurement(MIN_SIZE_MM, 'mm', nextUnitValue);
+      const convert = (value: number) => convertMeasurement(value, fromUnit, nextUnitValue);
+      const convertedWidth = convert(matWidth);
+      const convertedHeight = convert(matHeight);
+      const convertedWindows = windows.map((window) => ({
+        ...window,
+        x: convert(window.x),
+        y: convert(window.y),
+        width: convert(window.width),
+        height: convert(window.height)
+      }));
+
+      unit = nextUnitValue;
+      matWidth = convertedWidth;
+      matHeight = convertedHeight;
+      windows = convertedWindows.map((window) =>
+        clampWindow(window, {
+          matWidth: convertedWidth,
+          matHeight: convertedHeight,
+          minSize: nextMinSize
+        })
+      );
     });
   }
 
@@ -468,6 +957,11 @@
       }
       storageReady = true;
       persistState(snapshot());
+      const customPresets = loadPresetStore();
+      presets = buildPresetList(customPresets);
+      const initialPreset = presets[0] ?? null;
+      selectedPresetId = initialPreset ? initialPreset.id : null;
+      newPresetName = initialPreset ? initialPreset.name : '';
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -492,22 +986,24 @@
     previewContainerWidth - MAT_CONTAINER_PADDING
   );
 
-  $: previewScale = Math.max(
-    Math.min(
-      PREVIEW_MAX_WIDTH / matWidth,
-      PREVIEW_MAX_HEIGHT / matHeight,
-      availablePreviewWidth / matWidth,
+  $: previewScale = (() => {
+    const safeWidth = Math.max(matWidthMm, MIN_SIZE_MM);
+    const safeHeight = Math.max(matHeightMm, MIN_SIZE_MM);
+    const maxScale = Math.min(
+      PREVIEW_MAX_WIDTH / safeWidth,
+      PREVIEW_MAX_HEIGHT / safeHeight,
+      availablePreviewWidth / safeWidth,
       2
-    ),
-    MIN_PREVIEW_SCALE
-  );
-  $: scaledMatWidth = matWidth * previewScale;
-  $: scaledMatHeight = matHeight * previewScale;
+    );
+    return Math.max(maxScale, MIN_PREVIEW_SCALE);
+  })();
+  $: scaledMatWidth = matWidthMm * previewScale;
+  $: scaledMatHeight = matHeightMm * previewScale;
   $: positionedWindows = windows.map((window): PositionedWindow => {
-    const scaledWidth = window.width * previewScale;
-    const scaledHeight = window.height * previewScale;
-    const scaledX = window.x * previewScale;
-    const scaledY = window.y * previewScale;
+    const scaledWidth = window.width * unitScale * previewScale;
+    const scaledHeight = window.height * unitScale * previewScale;
+    const scaledX = window.x * unitScale * previewScale;
+    const scaledY = window.y * unitScale * previewScale;
 
     const horizontalAbove = scaledY > DIMENSION_LABEL_MARGIN * 2;
     const horizontalTop = clampValue(
@@ -691,6 +1187,14 @@
   $: selectedCount = selectedIds.length;
   $: canUndo = past.length > 0;
   $: canRedo = future.length > 0;
+
+  $: canLoadPreset = Boolean(
+    selectedPresetId && presets.some((preset) => preset.id === selectedPresetId)
+  );
+  $: canDeletePreset = Boolean(
+    canLoadPreset && selectedPresetId && !isDefaultPreset(selectedPresetId)
+  );
+  $: canSavePreset = Boolean(newPresetName.trim());
 </script>
 
 <section class="designer mat-designer">
@@ -700,7 +1204,7 @@
     unit={unit}
     unitOptions={unitOptions}
     previewScale={previewScale}
-    minSize={MIN_SIZE}
+    minSize={minSize}
     canUndo={canUndo}
     canRedo={canRedo}
     onMatWidthChange={handleMatWidthChange}
@@ -709,6 +1213,17 @@
     onUndo={undo}
     onRedo={redo}
     onPrint={printLayout}
+    presets={presets}
+    selectedPresetId={selectedPresetId}
+    newPresetName={newPresetName}
+    canLoadPreset={canLoadPreset}
+    canDeletePreset={canDeletePreset}
+    canSavePreset={canSavePreset}
+    onPresetSelect={handlePresetSelect}
+    onPresetLoad={loadSelectedPreset}
+    onPresetDelete={deleteSelectedPreset}
+    onPresetNameInput={handlePresetNameInput}
+    onPresetSave={savePreset}
   />
 
   <div class="layout">
@@ -718,7 +1233,7 @@
           windows={windows}
           selectedIdSet={selectedIdSet}
           selectedCount={selectedCount}
-          minSize={MIN_SIZE}
+          minSize={minSize}
           addWindow={addWindow}
           removeSelected={removeSelected}
           toggleSelection={toggleSelection}
@@ -735,24 +1250,26 @@
         />
       </div>
     </div>
-    <MatPreviewPanel
-      bind:containerWidth={previewContainerWidth}
-      positionedWindows={positionedWindows}
-      matDimensions={matDimensions}
-      extraDimensions={extraDimensions}
-      unit={unit}
-      scaledMatWidth={scaledMatWidth}
-      scaledMatHeight={scaledMatHeight}
-      selectedIdSet={selectedIdSet}
-      formatMeasurement={formatMeasurement}
-      matWidth={matWidth}
-      matHeight={matHeight}
-      clearSelection={clearSelection}
-      toggleSelection={toggleSelection}
-      altKey={altKey}
-      handleKeyActivate={handleKeyActivate}
-      selectedCount={selectedCount}
-    />
+    <div class="preview-area">
+      <MatPreviewPanel
+        bind:containerWidth={previewContainerWidth}
+        positionedWindows={positionedWindows}
+        matDimensions={matDimensions}
+        extraDimensions={extraDimensions}
+        unit={unit}
+        scaledMatWidth={scaledMatWidth}
+        scaledMatHeight={scaledMatHeight}
+        selectedIdSet={selectedIdSet}
+        formatMeasurement={formatMeasurement}
+        matWidth={matWidth}
+        matHeight={matHeight}
+        clearSelection={clearSelection}
+        toggleSelection={toggleSelection}
+        altKey={altKey}
+        handleKeyActivate={handleKeyActivate}
+        selectedCount={selectedCount}
+      />
+    </div>
   </div>
 </section>
 
@@ -760,123 +1277,125 @@
   :global(body) {
     margin: 0;
     font-family: 'Inter', system-ui, sans-serif;
-    background: #f4f4f5;
+    background: #fafafa;
     color: #1f2937;
   }
 
   .designer {
     display: flex;
-    max-width: 1120px;
+    max-width: 960px;
     margin: 0 auto;
-    padding: 2rem;
+    padding: 1.5rem 1rem;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1rem;
   }
 
   .layout {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 1.5rem;
-    align-items: stretch;
+    align-items: center;
   }
 
   .controls {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
-    flex: 1 1 520px;
-    min-width: 360px;
+    gap: 1rem;
+    width: 100%;
+    max-width: 720px;
+  }
+
+  .preview-area {
+    width: 100%;
+    display: flex;
+    justify-content: center;
   }
 
   .control-group {
     display: flex;
-    padding: 1.25rem;
+    padding: 1rem;
     background: #fff;
-    border-radius: 1rem;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
+    border-radius: 0.75rem;
+    border: 1px solid #e5e7eb;
+    box-shadow: none;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   :global(.mat-designer button) {
-    padding: 0.5rem 0.75rem;
-    border: none;
-    border-radius: 0.5rem;
-    background: #4f46e5;
+    padding: 0.4rem 0.7rem;
+    border-radius: 0.375rem;
+    border: 1px solid #2563eb;
+    background: #2563eb;
     color: #fff;
     cursor: pointer;
-    transition: background 0.2s ease;
     font: inherit;
+    font-size: 0.9rem;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
   }
 
   :global(.mat-designer button:disabled) {
-    background: #9ca3af;
+    background: #f3f4f6;
+    border-color: #e5e7eb;
+    color: #9ca3af;
     cursor: not-allowed;
   }
 
   :global(.mat-designer button:not(:disabled):hover) {
-    background: #4338ca;
+    background: #1d4ed8;
+    border-color: #1d4ed8;
   }
 
   :global(.mat-designer button.secondary) {
-    background: #e5e7eb;
+    background: #fff;
     color: #1f2937;
+    border-color: #d1d5db;
   }
 
   :global(.mat-designer button.secondary:disabled) {
-    background: #e5e7eb;
+    background: #f9fafb;
+    border-color: #e5e7eb;
     color: #9ca3af;
   }
 
   :global(.mat-designer button.secondary:not(:disabled):hover) {
-    background: #d1d5db;
+    background: #f3f4f6;
+    border-color: #cbd5f5;
   }
 
   :global(.mat-designer input[type='number']),
   :global(.mat-designer input[type='text']),
   :global(.mat-designer select) {
-    padding: 0.5rem 0.65rem;
+    padding: 0.4rem 0.6rem;
     border: 1px solid #d1d5db;
-    border-radius: 0.5rem;
+    border-radius: 0.375rem;
     background: #fff;
     font: inherit;
+    font-size: 0.95rem;
   }
 
   :global(.mat-designer input[type='number']:focus),
   :global(.mat-designer input[type='text']:focus),
   :global(.mat-designer select:focus) {
-    outline: 2px solid #4f46e5;
+    outline: 2px solid #2563eb;
     outline-offset: 1px;
-  }
-
-  @media (max-width: 1024px) {
-    .layout {
-      flex-direction: column;
-    }
-
-    .controls {
-      flex: 1 1 100%;
-      min-width: 0;
-      max-width: none;
-    }
   }
 
   @media (max-width: 640px) {
     .designer {
-      padding: 1.25rem 0.75rem;
+      padding: 1rem 0.75rem;
     }
 
     .layout {
-      gap: 1rem;
+      gap: 1.25rem;
     }
 
     .controls {
-      gap: 1rem;
-      min-width: 0;
+      gap: 0.75rem;
     }
 
     .control-group {
-      padding: 1rem;
+      padding: 0.75rem;
     }
   }
 
