@@ -6,7 +6,7 @@
   import MatPreviewPanel from './mat-designer/MatPreviewPanel.svelte';
   import type { MatWindow, EditableWindowKey, MatDesignerState, PositionedWindow, MatDimensionOverlay, ExtraDimension } from './mat-designer/types';
 
-  const MIN_SIZE = 20;
+  const MIN_SIZE_MM = 20;
   const PREVIEW_MAX_WIDTH = 600;
   const PREVIEW_MAX_HEIGHT = 420;
   const HISTORY_LIMIT = 100;
@@ -20,9 +20,23 @@
 
   const STORAGE_KEY = 'mat-designer-state/v1';
 
+  type Unit = 'mm' | 'cm' | 'in';
+
+  const unitOptions: Unit[] = ['mm', 'cm', 'in'];
+  const UNIT_TO_MM: Record<Unit, number> = {
+    mm: 1,
+    cm: 10,
+    in: 25.4
+  };
+  const ROUND_PRECISION = 1000;
+
   let matWidth = 500;
   let matHeight = 350;
-  let unit = "mm";
+  let unit: Unit = 'mm';
+  let minSize = MIN_SIZE_MM;
+  let unitScale = UNIT_TO_MM[unit];
+  let matWidthMm = matWidth * unitScale;
+  let matHeightMm = matHeight * unitScale;
   let idCounter = 0;
 
   function createWindow({
@@ -69,14 +83,12 @@
     vertical: { left: 0, top: 0, length: 0 }
   };
 
-  const unitOptions = ["mm", "cm", "in"];
-
   const altKey = (event: MouseEvent | KeyboardEvent) =>
     event.shiftKey || event.metaKey || event.ctrlKey;
 
-  function sanitizeDimension(value: number, fallback: number) {
+  function sanitizeDimension(value: number, fallback: number, minimum = minSize) {
     if (!Number.isFinite(value)) return fallback;
-    return Math.max(value, MIN_SIZE);
+    return Math.max(value, minimum);
   }
 
   function cloneWindows(list: MatWindow[]): MatWindow[] {
@@ -86,8 +98,27 @@
   const clampValue = (value: number, min = 0, max = Number.POSITIVE_INFINITY) =>
     Math.min(Math.max(value, min), max);
 
+  function roundMeasurement(value: number) {
+    return Math.round(value * ROUND_PRECISION) / ROUND_PRECISION;
+  }
+
+  function convertMeasurement(value: number, from: Unit, to: Unit) {
+    if (from === to) return value;
+    const millimetres = value * UNIT_TO_MM[from];
+    return roundMeasurement(millimetres / UNIT_TO_MM[to]);
+  }
+
+  function isUnit(value: string): value is Unit {
+    return value === 'mm' || value === 'cm' || value === 'in';
+  }
+
+  $: minSize = convertMeasurement(MIN_SIZE_MM, 'mm', unit);
+  $: unitScale = UNIT_TO_MM[unit];
+  $: matWidthMm = matWidth * unitScale;
+  $: matHeightMm = matHeight * unitScale;
+
   function formatMeasurement(length: number) {
-    const rounded = Math.round(length);
+    const rounded = roundMeasurement(length);
     return `${rounded} ${unit}`;
   }
 
@@ -100,26 +131,37 @@
       if (!parsed || typeof parsed !== 'object') return null;
       if (typeof parsed.matWidth !== 'number' || typeof parsed.matHeight !== 'number') return null;
 
+      const persistedUnit =
+        typeof parsed.unit === 'string' && isUnit(parsed.unit) ? parsed.unit : unit;
+      const minForPersistedUnit = convertMeasurement(MIN_SIZE_MM, 'mm', persistedUnit);
+      const fallbackWidth = convertMeasurement(matWidth, unit, persistedUnit);
+      const fallbackHeight = convertMeasurement(matHeight, unit, persistedUnit);
+
       const sanitizedWindows = Array.isArray(parsed.windows)
         ? parsed.windows
             .filter(Boolean)
-            .map((window) => ({
-              id: Number((window as MatWindow).id) || 0,
-              name:
-                typeof (window as MatWindow).name === 'string'
-                  ? (window as MatWindow).name
-                  : `Window ${Number((window as MatWindow).id) || 0}`,
-              x: Number((window as MatWindow).x) || 0,
-              y: Number((window as MatWindow).y) || 0,
-              width: Number((window as MatWindow).width) || MIN_SIZE,
-              height: Number((window as MatWindow).height) || MIN_SIZE
-            }))
+            .map((window) => {
+              const candidate = window as MatWindow;
+              const width = Number(candidate.width);
+              const height = Number(candidate.height);
+              return {
+                id: Number(candidate.id) || 0,
+                name:
+                  typeof candidate.name === 'string'
+                    ? candidate.name
+                    : `Window ${Number(candidate.id) || 0}`,
+                x: Number(candidate.x) || 0,
+                y: Number(candidate.y) || 0,
+                width: sanitizeDimension(width, minForPersistedUnit, minForPersistedUnit),
+                height: sanitizeDimension(height, minForPersistedUnit, minForPersistedUnit)
+              };
+            })
         : [];
 
       return {
-        matWidth: sanitizeDimension(parsed.matWidth, matWidth),
-        matHeight: sanitizeDimension(parsed.matHeight, matHeight),
-        unit: typeof parsed.unit === 'string' ? parsed.unit : unit,
+        matWidth: sanitizeDimension(parsed.matWidth, fallbackWidth, minForPersistedUnit),
+        matHeight: sanitizeDimension(parsed.matHeight, fallbackHeight, minForPersistedUnit),
+        unit: persistedUnit,
         windows: sanitizedWindows,
         selectedIds: Array.isArray(parsed.selectedIds) ? parsed.selectedIds.map(Number) : [],
         idCounter: typeof parsed.idCounter === 'number' ? parsed.idCounter : 0
@@ -234,11 +276,17 @@
     }
   }
 
-  function clampWindow(window: MatWindow): MatWindow {
-    const width = Math.min(Math.max(window.width, MIN_SIZE), matWidth);
-    const height = Math.min(Math.max(window.height, MIN_SIZE), matHeight);
-    const x = Math.min(Math.max(window.x, 0), matWidth - width);
-    const y = Math.min(Math.max(window.y, 0), matHeight - height);
+  function clampWindow(
+    window: MatWindow,
+    limits: { matWidth?: number; matHeight?: number; minSize?: number } = {}
+  ): MatWindow {
+    const limitWidth = limits.matWidth ?? matWidth;
+    const limitHeight = limits.matHeight ?? matHeight;
+    const minimum = limits.minSize ?? minSize;
+    const width = Math.min(Math.max(window.width, minimum), limitWidth);
+    const height = Math.min(Math.max(window.height, minimum), limitHeight);
+    const x = Math.min(Math.max(window.x, 0), Math.max(limitWidth - width, 0));
+    const y = Math.min(Math.max(window.y, 0), Math.max(limitHeight - height, 0));
     return { ...window, width, height, x, y };
   }
 
@@ -417,10 +465,33 @@
 
   function handleUnitChange(event: Event) {
     const select = event.currentTarget as HTMLSelectElement;
-    const nextUnit = select.value;
-    if (nextUnit === unit) return;
+    const nextUnitValue = select.value;
+    if (!isUnit(nextUnitValue)) return;
+    if (nextUnitValue === unit) return;
     mutate(() => {
-      unit = nextUnit;
+      const fromUnit = unit;
+      const nextMinSize = convertMeasurement(MIN_SIZE_MM, 'mm', nextUnitValue);
+      const convert = (value: number) => convertMeasurement(value, fromUnit, nextUnitValue);
+      const convertedWidth = convert(matWidth);
+      const convertedHeight = convert(matHeight);
+      const convertedWindows = windows.map((window) => ({
+        ...window,
+        x: convert(window.x),
+        y: convert(window.y),
+        width: convert(window.width),
+        height: convert(window.height)
+      }));
+
+      unit = nextUnitValue;
+      matWidth = convertedWidth;
+      matHeight = convertedHeight;
+      windows = convertedWindows.map((window) =>
+        clampWindow(window, {
+          matWidth: convertedWidth,
+          matHeight: convertedHeight,
+          minSize: nextMinSize
+        })
+      );
     });
   }
 
@@ -508,22 +579,24 @@
     previewContainerWidth - MAT_CONTAINER_PADDING
   );
 
-  $: previewScale = Math.max(
-    Math.min(
-      PREVIEW_MAX_WIDTH / matWidth,
-      PREVIEW_MAX_HEIGHT / matHeight,
-      availablePreviewWidth / matWidth,
+  $: previewScale = (() => {
+    const safeWidth = Math.max(matWidthMm, MIN_SIZE_MM);
+    const safeHeight = Math.max(matHeightMm, MIN_SIZE_MM);
+    const maxScale = Math.min(
+      PREVIEW_MAX_WIDTH / safeWidth,
+      PREVIEW_MAX_HEIGHT / safeHeight,
+      availablePreviewWidth / safeWidth,
       2
-    ),
-    MIN_PREVIEW_SCALE
-  );
-  $: scaledMatWidth = matWidth * previewScale;
-  $: scaledMatHeight = matHeight * previewScale;
+    );
+    return Math.max(maxScale, MIN_PREVIEW_SCALE);
+  })();
+  $: scaledMatWidth = matWidthMm * previewScale;
+  $: scaledMatHeight = matHeightMm * previewScale;
   $: positionedWindows = windows.map((window): PositionedWindow => {
-    const scaledWidth = window.width * previewScale;
-    const scaledHeight = window.height * previewScale;
-    const scaledX = window.x * previewScale;
-    const scaledY = window.y * previewScale;
+    const scaledWidth = window.width * unitScale * previewScale;
+    const scaledHeight = window.height * unitScale * previewScale;
+    const scaledX = window.x * unitScale * previewScale;
+    const scaledY = window.y * unitScale * previewScale;
 
     const horizontalAbove = scaledY > DIMENSION_LABEL_MARGIN * 2;
     const horizontalTop = clampValue(
@@ -716,7 +789,7 @@
     unit={unit}
     unitOptions={unitOptions}
     previewScale={previewScale}
-    minSize={MIN_SIZE}
+    minSize={minSize}
     canUndo={canUndo}
     canRedo={canRedo}
     onMatWidthChange={handleMatWidthChange}
@@ -734,7 +807,7 @@
           windows={windows}
           selectedIdSet={selectedIdSet}
           selectedCount={selectedCount}
-          minSize={MIN_SIZE}
+          minSize={minSize}
           addWindow={addWindow}
           removeSelected={removeSelected}
           toggleSelection={toggleSelection}
