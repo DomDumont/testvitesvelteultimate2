@@ -1,6 +1,14 @@
 <script lang="ts">
   export let selectedCount: number;
-  export let alignSelected: (edge: 'left' | 'right' | 'top' | 'bottom') => void;
+  export let alignSelected: (
+    alignment:
+      | 'left'
+      | 'right'
+      | 'top'
+      | 'bottom'
+      | 'horizontal-center'
+      | 'vertical-center'
+  ) => void;
   export let centerSelected: (direction: 'horizontal' | 'vertical') => void;
   export let distribute: (direction: 'horizontal' | 'vertical') => void;
 </script>
@@ -18,6 +26,12 @@
   </button>
   <button type="button" on:click={() => alignSelected('bottom')} disabled={selectedCount < 2}>
     Align Bottom
+  </button>
+  <button type="button" on:click={() => alignSelected('horizontal-center')} disabled={selectedCount < 2}>
+    Align Horizontal Center
+  </button>
+  <button type="button" on:click={() => alignSelected('vertical-center')} disabled={selectedCount < 2}>
+    Align Vertical Center
   </button>
   <button type="button" on:click={() => centerSelected('horizontal')} disabled={!selectedCount}>
     Center Horizontally

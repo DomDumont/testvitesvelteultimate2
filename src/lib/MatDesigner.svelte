@@ -306,29 +306,45 @@
     });
   }
 
-  function alignSelected(edge: "left" | "right" | "top" | "bottom") {
+  function alignSelected(
+    alignment:
+      | "left"
+      | "right"
+      | "top"
+      | "bottom"
+      | "horizontal-center"
+      | "vertical-center"
+  ) {
+    if (selectedIds.length < 2) return;
+
+    const anchorId = selectedIds[selectedIds.length - 1];
+    const anchorWindow = windows.find((window) => window.id === anchorId);
+    if (!anchorWindow) return;
+
     const selectedSet = new Set(selectedIds);
-    const selectedWindows = windows.filter((window) => selectedSet.has(window.id));
-    if (selectedWindows.length < 2) return;
 
     let reference = 0;
-    if (edge === "left") reference = Math.min(...selectedWindows.map((window) => window.x));
-    if (edge === "right") {
-      reference = Math.max(...selectedWindows.map((window) => window.x + window.width));
+    if (alignment === "left") reference = anchorWindow.x;
+    if (alignment === "right") reference = anchorWindow.x + anchorWindow.width;
+    if (alignment === "top") reference = anchorWindow.y;
+    if (alignment === "bottom") reference = anchorWindow.y + anchorWindow.height;
+    if (alignment === "horizontal-center") {
+      reference = anchorWindow.x + anchorWindow.width / 2;
     }
-    if (edge === "top") reference = Math.min(...selectedWindows.map((window) => window.y));
-    if (edge === "bottom") {
-      reference = Math.max(...selectedWindows.map((window) => window.y + window.height));
+    if (alignment === "vertical-center") {
+      reference = anchorWindow.y + anchorWindow.height / 2;
     }
 
     mutate(() => {
       windows = windows.map((window) => {
         if (!selectedSet.has(window.id)) return window;
         const updated = { ...window };
-        if (edge === "left") updated.x = reference;
-        if (edge === "right") updated.x = reference - updated.width;
-        if (edge === "top") updated.y = reference;
-        if (edge === "bottom") updated.y = reference - updated.height;
+        if (alignment === "left") updated.x = reference;
+        if (alignment === "right") updated.x = reference - updated.width;
+        if (alignment === "top") updated.y = reference;
+        if (alignment === "bottom") updated.y = reference - updated.height;
+        if (alignment === "horizontal-center") updated.x = reference - updated.width / 2;
+        if (alignment === "vertical-center") updated.y = reference - updated.height / 2;
         return clampWindow(updated);
       });
     });
