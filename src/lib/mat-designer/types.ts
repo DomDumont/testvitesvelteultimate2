@@ -20,6 +20,14 @@ export type MatDesignerState = {
   idCounter: number;
 };
 
+export type MatPreset = {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  state: MatDesignerState;
+};
+
 export type DimensionPosition = 'above' | 'below' | 'left' | 'right';
 
 export type PositionedWindow = MatWindow & {

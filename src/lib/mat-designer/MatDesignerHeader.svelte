@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { MatPreset } from './types';
+
   export let matWidth: number;
   export let matHeight: number;
   export let unit: string;
@@ -13,6 +15,17 @@
   export let onUndo: () => void;
   export let onRedo: () => void;
   export let onPrint: () => void;
+  export let presets: MatPreset[];
+  export let selectedPresetId: string | null;
+  export let newPresetName: string;
+  export let canLoadPreset: boolean;
+  export let canDeletePreset: boolean;
+  export let canSavePreset: boolean;
+  export let onPresetSelect: (event: Event) => void;
+  export let onPresetLoad: () => void;
+  export let onPresetDelete: () => void;
+  export let onPresetNameInput: (event: Event) => void;
+  export let onPresetSave: () => void;
 </script>
 
 <header>
@@ -76,6 +89,41 @@
     </label>
     <span class="scale">Preview scale: {(previewScale * 100).toFixed(0)}%</span>
   </div>
+  <div class="preset-controls">
+    <label class="preset-row">
+      Presets
+      <div class="preset-actions">
+        <select value={selectedPresetId ?? ''} on:change={onPresetSelect}>
+          <option value="">Select preset…</option>
+          {#each presets as preset}
+            <option value={preset.id} selected={preset.id === selectedPresetId}>
+              {preset.name}
+            </option>
+          {/each}
+        </select>
+        <button type="button" class="secondary" on:click={onPresetLoad} disabled={!canLoadPreset}>
+          Load
+        </button>
+        <button type="button" class="secondary" on:click={onPresetDelete} disabled={!canDeletePreset}>
+          Delete
+        </button>
+      </div>
+    </label>
+    <label class="preset-row">
+      Save preset
+      <div class="preset-actions">
+        <input
+          type="text"
+          value={newPresetName}
+          placeholder="Preset name"
+          on:input={onPresetNameInput}
+        />
+        <button type="button" on:click={onPresetSave} disabled={!canSavePreset}>
+          Save
+        </button>
+      </div>
+    </label>
+  </div>
 </header>
 
 <style>
@@ -130,6 +178,32 @@
     align-self: end;
   }
 
+  .preset-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .preset-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .preset-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .preset-actions select,
+  .preset-actions input {
+    flex: 1;
+  }
+
   @media (max-width: 768px) {
     .mat-controls {
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -149,6 +223,19 @@
     .history-actions {
       width: 100%;
       justify-content: flex-start;
+    }
+
+    .preset-controls {
+      grid-template-columns: 1fr;
+      gap: 0.6rem;
+    }
+
+    .preset-actions {
+      flex-wrap: wrap;
+    }
+
+    .preset-actions button {
+      flex: 1 1 100px;
     }
   }
 </style>

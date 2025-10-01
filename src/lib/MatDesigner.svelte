@@ -11,7 +11,8 @@
     PositionedWindow,
     MatDimensionOverlay,
     ExtraDimension,
-    Unit
+    Unit,
+    MatPreset
   } from './mat-designer/types';
 
   const MIN_SIZE_MM = 20;
@@ -27,6 +28,8 @@
   const DIMENSION_SAFE_PADDING = 12;
 
   const STORAGE_KEY = 'mat-designer-state/v1';
+  const PRESETS_STORAGE_KEY = 'mat-designer-presets/v1';
+  const DEFAULT_PRESET_PREFIX = 'default-';
 
   const unitOptions: Unit[] = ['mm', 'cm', 'in'];
   const UNIT_TO_MM: Record<Unit, number> = {
@@ -72,6 +75,14 @@
   let past: MatDesignerState[] = [];
   let future: MatDesignerState[] = [];
 
+  let presets: MatPreset[] = [];
+  let selectedPresetId: string | null = null;
+  let activePresetId: string | null = null;
+  let newPresetName = '';
+  let canLoadPreset = false;
+  let canDeletePreset = false;
+  let canSavePreset = false;
+
   let previewContainerWidth = PREVIEW_MAX_WIDTH;
 
   let previewScale = 1;
@@ -82,6 +93,7 @@
   let spacingDimensions: ExtraDimension[] = [];
 
   let storageReady = false;
+  let suppressPresetReset = false;
 
   let positionedWindows: PositionedWindow[] = [];
   let matDimensions: MatDimensionOverlay = {
@@ -99,6 +111,187 @@
 
   function cloneWindows(list: MatWindow[]): MatWindow[] {
     return list.map((window) => ({ ...window }));
+  }
+
+  function cloneState(state: MatDesignerState): MatDesignerState {
+    return {
+      matWidth: state.matWidth,
+      matHeight: state.matHeight,
+      unit: state.unit,
+      windows: cloneWindows(state.windows),
+      selectedIds: [...state.selectedIds],
+      idCounter: state.idCounter
+    };
+  }
+
+  function clonePreset(preset: MatPreset): MatPreset {
+    return {
+      id: preset.id,
+      name: preset.name,
+      createdAt: preset.createdAt,
+      updatedAt: preset.updatedAt,
+      state: cloneState(preset.state)
+    };
+  }
+
+  const DEFAULT_PRESETS = createDefaultPresets();
+
+  function createDefaultPresets(): MatPreset[] {
+    const classicPortrait: MatDesignerState = {
+      matWidth: 280,
+      matHeight: 356,
+      unit: 'mm',
+      windows: [
+        {
+          id: 1,
+          name: 'Portrait Opening',
+          x: 38.5,
+          y: 51,
+          width: 203,
+          height: 254
+        }
+      ],
+      selectedIds: [],
+      idCounter: 1
+    };
+
+    const galleryDuo: MatDesignerState = {
+      matWidth: 457,
+      matHeight: 356,
+      unit: 'mm',
+      windows: [
+        {
+          id: 1,
+          name: 'Left Opening',
+          x: 70,
+          y: 89,
+          width: 127,
+          height: 178
+        },
+        {
+          id: 2,
+          name: 'Right Opening',
+          x: 260,
+          y: 89,
+          width: 127,
+          height: 178
+        }
+      ],
+      selectedIds: [],
+      idCounter: 2
+    };
+
+    const panoramicTriptych: MatDesignerState = {
+      matWidth: 635,
+      matHeight: 305,
+      unit: 'mm',
+      windows: [
+        {
+          id: 1,
+          name: 'Panel A',
+          x: 52.5,
+          y: 47.5,
+          width: 150,
+          height: 210
+        },
+        {
+          id: 2,
+          name: 'Panel B',
+          x: 242.5,
+          y: 47.5,
+          width: 150,
+          height: 210
+        },
+        {
+          id: 3,
+          name: 'Panel C',
+          x: 432.5,
+          y: 47.5,
+          width: 150,
+          height: 210
+        }
+      ],
+      selectedIds: [],
+      idCounter: 3
+    };
+
+    const titleBlockPortrait: MatDesignerState = {
+      matWidth: 280,
+      matHeight: 356,
+      unit: 'mm',
+      windows: [
+        {
+          id: 1,
+          name: 'Artwork Opening',
+          x: 38.5,
+          y: 30,
+          width: 203,
+          height: 254
+        },
+        {
+          id: 2,
+          name: 'Title Window',
+          x: 60,
+          y: 304,
+          width: 160,
+          height: 40
+        }
+      ],
+      selectedIds: [],
+      idCounter: 2
+    };
+
+    const defaults: Array<{ id: string; name: string; state: MatDesignerState }> = [
+      {
+        id: `${DEFAULT_PRESET_PREFIX}classic-portrait`,
+        name: 'Classic Portrait 8x10',
+        state: classicPortrait
+      },
+      {
+        id: `${DEFAULT_PRESET_PREFIX}gallery-duo`,
+        name: 'Gallery Duo 5x7',
+        state: galleryDuo
+      },
+      {
+        id: `${DEFAULT_PRESET_PREFIX}panoramic-triptych`,
+        name: 'Panoramic Triptych',
+        state: panoramicTriptych
+      },
+      {
+        id: `${DEFAULT_PRESET_PREFIX}title-block`,
+        name: 'Museum Title Block',
+        state: titleBlockPortrait
+      }
+    ];
+
+    return defaults.map((entry, index) => ({
+      id: entry.id,
+      name: entry.name,
+      createdAt: index,
+      updatedAt: index,
+      state: cloneState(entry.state)
+    }));
+  }
+
+  function isDefaultPreset(id: string | null | undefined): boolean {
+    return Boolean(id && id.startsWith(DEFAULT_PRESET_PREFIX));
+  }
+
+  function buildPresetList(customPresets: MatPreset[]): MatPreset[] {
+    const defaults = DEFAULT_PRESETS.map(clonePreset);
+    const customs = customPresets
+      .filter((preset) => !isDefaultPreset(preset.id))
+      .map(clonePreset);
+
+    const combined = [...defaults, ...customs];
+    combined.sort((a, b) => {
+      const aDefault = isDefaultPreset(a.id);
+      const bDefault = isDefaultPreset(b.id);
+      if (aDefault && !bDefault) return -1;
+      if (!aDefault && bDefault) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    return combined;
   }
 
   const clampValue = (value: number, min = 0, max = Number.POSITIVE_INFINITY) =>
@@ -185,6 +378,206 @@
     } catch (error) {
       console.warn('Failed to persist mat designer state', error);
     }
+  }
+
+  function loadPresetStore(): MatPreset[] {
+    if (typeof window === 'undefined' || !window.localStorage) return [];
+    try {
+      const raw = window.localStorage.getItem(PRESETS_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      const sanitized = parsed
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') return null;
+          const preset = entry as Partial<MatPreset>;
+          if (typeof preset.id !== 'string' || !preset.id) return null;
+          if (typeof preset.name !== 'string' || !preset.name.trim()) return null;
+          if (typeof preset.createdAt !== 'number' || typeof preset.updatedAt !== 'number') return null;
+          const state = preset.state as Partial<MatDesignerState> | undefined;
+          if (!state) return null;
+          if (
+            typeof state.matWidth !== 'number' ||
+            typeof state.matHeight !== 'number' ||
+            typeof state.unit !== 'string' ||
+            !isUnit(state.unit) ||
+            !Array.isArray(state.windows)
+          ) {
+            return null;
+          }
+
+          const sanitizedWindows = state.windows
+            .filter(Boolean)
+            .map((window) => {
+              const candidate = window as MatWindow;
+              return {
+                id: Number(candidate.id) || 0,
+                name:
+                  typeof candidate.name === 'string'
+                    ? candidate.name
+                    : `Window ${Number(candidate.id) || 0}`,
+                x: Number(candidate.x) || 0,
+                y: Number(candidate.y) || 0,
+                width: Number(candidate.width) || MIN_SIZE_MM,
+                height: Number(candidate.height) || MIN_SIZE_MM
+              };
+            });
+
+          return {
+            id: preset.id,
+            name: preset.name.trim(),
+            createdAt: preset.createdAt,
+            updatedAt: preset.updatedAt,
+            state: {
+              matWidth: state.matWidth,
+              matHeight: state.matHeight,
+              unit: state.unit,
+              windows: sanitizedWindows,
+              selectedIds: Array.isArray(state.selectedIds)
+                ? state.selectedIds.map(Number).filter((id) => Number.isFinite(id))
+                : [],
+              idCounter: typeof state.idCounter === 'number' ? state.idCounter : 0
+            }
+          } satisfies MatPreset;
+        })
+        .filter((value): value is MatPreset => Boolean(value));
+
+      return sanitized
+        .filter((preset) => !isDefaultPreset(preset.id))
+        .map((preset) => clonePreset(preset));
+    } catch (error) {
+      console.warn('Failed to load mat designer presets', error);
+      return [];
+    }
+  }
+
+  function persistPresets(list: MatPreset[]) {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    try {
+      window.localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(list));
+    } catch (error) {
+      console.warn('Failed to persist mat designer presets', error);
+    }
+  }
+
+  function handlePresetSelect(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement;
+    const value = select.value;
+    selectedPresetId = value || null;
+    if (!selectedPresetId) {
+      newPresetName = '';
+      return;
+    }
+    const preset = presets.find((entry) => entry.id === selectedPresetId);
+    newPresetName = preset ? preset.name : '';
+  }
+
+  function loadSelectedPreset() {
+    if (!selectedPresetId) return;
+    const preset = presets.find((entry) => entry.id === selectedPresetId);
+    if (!preset) return;
+    suppressPresetReset = true;
+    applyState({
+      matWidth: preset.state.matWidth,
+      matHeight: preset.state.matHeight,
+      unit: preset.state.unit,
+      windows: cloneWindows(preset.state.windows),
+      selectedIds: [...preset.state.selectedIds],
+      idCounter: preset.state.idCounter
+    });
+    windows = windows.map((window) => clampWindow(window));
+    past = [];
+    future = [];
+    suppressPresetReset = false;
+    activePresetId = preset.id;
+    newPresetName = preset.name;
+    if (storageReady) {
+      persistState(snapshot());
+    }
+  }
+
+  function deleteSelectedPreset() {
+    if (!selectedPresetId || isDefaultPreset(selectedPresetId)) return;
+
+    const existingCustomPresets = presets
+      .filter((preset) => !isDefaultPreset(preset.id))
+      .map(clonePreset);
+
+    const nextCustomPresets = existingCustomPresets.filter((preset) => preset.id !== selectedPresetId);
+    if (nextCustomPresets.length === existingCustomPresets.length) return;
+
+    persistPresets(nextCustomPresets);
+    presets = buildPresetList(nextCustomPresets);
+
+    if (activePresetId === selectedPresetId) {
+      activePresetId = null;
+    }
+
+    const nextSelection = presets.find((preset) => !isDefaultPreset(preset.id)) ?? presets[0] ?? null;
+    selectedPresetId = nextSelection ? nextSelection.id : null;
+    newPresetName = nextSelection ? nextSelection.name : '';
+  }
+
+  function savePreset() {
+    const trimmedName = newPresetName.trim();
+    if (!trimmedName) return;
+    const now = Date.now();
+    const currentSnapshot = snapshot();
+
+    const customPresets = presets
+      .filter((preset) => !isDefaultPreset(preset.id))
+      .map(clonePreset);
+
+    const existingIndex = selectedPresetId
+      ? customPresets.findIndex((preset) => preset.id === selectedPresetId)
+      : -1;
+    const byNameIndex = customPresets.findIndex(
+      (preset) => preset.name.toLowerCase() === trimmedName.toLowerCase()
+    );
+
+    let targetId: string;
+    if (existingIndex >= 0) {
+      const target = customPresets[existingIndex];
+      customPresets[existingIndex] = {
+        ...target,
+        name: trimmedName,
+        updatedAt: now,
+        state: currentSnapshot
+      };
+      targetId = customPresets[existingIndex].id;
+    } else if (byNameIndex >= 0) {
+      const target = customPresets[byNameIndex];
+      customPresets[byNameIndex] = {
+        ...target,
+        name: trimmedName,
+        updatedAt: now,
+        state: currentSnapshot
+      };
+      targetId = customPresets[byNameIndex].id;
+    } else {
+      const newPreset: MatPreset = {
+        id: `preset-${now}`,
+        name: trimmedName,
+        createdAt: now,
+        updatedAt: now,
+        state: currentSnapshot
+      };
+      customPresets.push(newPreset);
+      targetId = newPreset.id;
+    }
+
+    persistPresets(customPresets);
+    presets = buildPresetList(customPresets);
+
+    const activePreset = presets.find((preset) => preset.id === targetId) ?? presets[0] ?? null;
+    selectedPresetId = activePreset ? activePreset.id : null;
+    newPresetName = activePreset ? activePreset.name : '';
+    activePresetId = activePreset ? activePreset.id : null;
+  }
+
+  function handlePresetNameInput(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    newPresetName = input.value;
   }
 
   const MIN_OVERLAP_PX = 4;
@@ -278,6 +671,9 @@
       future = [];
       if (storageReady) {
         persistState(after);
+      }
+      if (!suppressPresetReset) {
+        activePresetId = null;
       }
     }
   }
@@ -561,6 +957,11 @@
       }
       storageReady = true;
       persistState(snapshot());
+      const customPresets = loadPresetStore();
+      presets = buildPresetList(customPresets);
+      const initialPreset = presets[0] ?? null;
+      selectedPresetId = initialPreset ? initialPreset.id : null;
+      newPresetName = initialPreset ? initialPreset.name : '';
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -786,6 +1187,14 @@
   $: selectedCount = selectedIds.length;
   $: canUndo = past.length > 0;
   $: canRedo = future.length > 0;
+
+  $: canLoadPreset = Boolean(
+    selectedPresetId && presets.some((preset) => preset.id === selectedPresetId)
+  );
+  $: canDeletePreset = Boolean(
+    canLoadPreset && selectedPresetId && !isDefaultPreset(selectedPresetId)
+  );
+  $: canSavePreset = Boolean(newPresetName.trim());
 </script>
 
 <section class="designer mat-designer">
@@ -804,6 +1213,17 @@
     onUndo={undo}
     onRedo={redo}
     onPrint={printLayout}
+    presets={presets}
+    selectedPresetId={selectedPresetId}
+    newPresetName={newPresetName}
+    canLoadPreset={canLoadPreset}
+    canDeletePreset={canDeletePreset}
+    canSavePreset={canSavePreset}
+    onPresetSelect={handlePresetSelect}
+    onPresetLoad={loadSelectedPreset}
+    onPresetDelete={deleteSelectedPreset}
+    onPresetNameInput={handlePresetNameInput}
+    onPresetSave={savePreset}
   />
 
   <div class="layout">
